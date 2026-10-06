@@ -1,0 +1,22 @@
+# Cloudflare Workers ayarı. Gizli değerler buraya YAZILMAZ; `npx wrangler secret put <AD>` ile girilir:
+#   GEMINI_API_KEY, GROQ_API_KEY, GITHUB_TOKEN (yalnız bilgi deposunda Contents: read + Issues: write)
+name = "dijital-ikiz"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# Hata günlükleri panelde görünsün (Workers → dijital-ikiz → Logs): kayıt ya da bilgi dosyası sessizce düşmesin.
+[observability]
+enabled = true
+
+# Aynı adresten dakikada en çok 8 soru; bütün sunucu örnekleri için ortak sayaç.
+[[ratelimits]]
+name = "HIZ_SINIRI"
+namespace_id = "1001"
+simple = { limit = 8, period = 60 }
+
+[vars]
+BILGI_DEPO = "bora-EEM/dijital-ikiz-bilgi"
+IZINLI_KOKENLER = "https://bora-eem.github.io"
+ILETISIM_EPOSTA = "koruyucubora@gmail.com"
+GEMINI_MODELLER = "gemini-3.5-flash-lite"
+GROQ_MODELLER = "openai/gpt-oss-120b"

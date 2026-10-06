@@ -1,0 +1,11 @@
+{
+  "name": "dijital-ikiz",
+  "private": true,
+  "type": "module",
+  "description": "Bora Koruyucu'nun yapay zekâ ikizi: GitHub Pages'te sayfa, Cloudflare Workers'ta ara sunucu.",
+  "scripts": {
+    "yerel": "node gelistirme/sunucu.mjs",
+    "test": "node --test \"test/*.test.js\"",
+    "yayinla": "cd worker && npx wrangler deploy"
+  }
+}

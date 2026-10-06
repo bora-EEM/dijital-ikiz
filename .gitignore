@@ -1,0 +1,10 @@
+# Anahtarlar: yerelde worker/.dev.vars, yayında Cloudflare secret. Hiçbiri depoya girmez.
+.dev.vars
+*.dev.vars
+.env*
+# Bilgi dosyası bu depoda durmaz (gizli depoda); yerel kopya da girmesin.
+bilgi.md
+node_modules/
+.wrangler/
+sinav/sonuc/
+__pycache__/

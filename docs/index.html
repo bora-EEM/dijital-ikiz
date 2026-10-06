@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bora Koruyucu — dijital ikiz</title>
+<meta name="description" content="Bora Koruyucu'nun yapay zekâ ikizi: projelerini, staj durumunu ve çalışma biçimini onun ağzından anlatır.">
+<style>
+  :root {
+    --zemin-ust: #10201c; --zemin-alt: #060b0a; --kart: #1b2a27; --kart-ic: #243430;
+    --vurgu: #1ed6a0; --vurgu-koyu: #12392f; --kenar: #2f433e;
+    --metin: #ecf4f1; --ikincil: #b9c9c4; --soluk: #8ca09a; --sorun: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  html { scroll-padding-bottom: 150px; } /* yapışkan yazı kutusu son mesajı örtmesin */
+  body {
+    background: radial-gradient(ellipse 70% 45% at 0% 0%, rgba(32, 214, 160, .16), transparent 70%),
+                linear-gradient(180deg, var(--zemin-ust), var(--zemin-alt)) fixed;
+    background-color: var(--zemin-alt);
+    color: var(--metin);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .sayfa { max-width: 680px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; padding: 0 16px; }
+
+  header { padding: 40px 0 20px; position: relative; }
+  .rozet { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--vurgu);
+           background: var(--vurgu-koyu); border-radius: 999px; padding: 4px 12px; }
+  .rozet::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--vurgu); }
+  h1 { font-size: 34px; line-height: 1.15; margin: 14px 0 6px; letter-spacing: -.02em; font-weight: 700; }
+  .alt { color: var(--ikincil); margin: 0; }
+  .dil { position: absolute; top: 40px; right: 0; display: flex; gap: 2px; background: var(--kart); border-radius: 999px; padding: 3px; }
+  .dil button { border: 0; background: none; color: var(--soluk); font: inherit; font-size: 13px; padding: 3px 10px; border-radius: 999px; cursor: pointer; }
+  .dil button[aria-pressed="true"] { background: var(--kart-ic); color: var(--metin); }
+
+  main { flex: 1; display: flex; flex-direction: column; gap: 14px; padding: 8px 0 16px; }
+  .oneriler { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+  .oneri { text-align: left; border: 1px solid var(--kenar); background: rgba(27, 42, 39, .7); color: var(--metin);
+           font: inherit; padding: 14px 16px; border-radius: 14px; cursor: pointer; transition: border-color .15s, background .15s; }
+  .oneri:hover { border-color: var(--vurgu); background: var(--kart); }
+
+  .mesaj { max-width: 88%; padding: 12px 16px; border-radius: 18px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .ziyaretci { align-self: flex-end; background: var(--vurgu); color: #05221a; border-bottom-right-radius: 6px; }
+  .ikiz { align-self: flex-start; background: var(--kart); border-bottom-left-radius: 6px; }
+  .ikiz.hata { color: var(--sorun); }
+  .ilet { align-self: flex-start; margin-top: -6px; font-size: 14px; color: var(--vurgu); text-decoration: none;
+          border: 1px solid var(--vurgu-koyu); border-radius: 999px; padding: 6px 14px; }
+  .ilet:hover { background: var(--vurgu-koyu); }
+  .yaziyor { display: inline-flex; gap: 5px; }
+  .yaziyor i { width: 7px; height: 7px; border-radius: 50%; background: var(--soluk); animation: zipla 1s infinite ease-in-out; }
+  .yaziyor i:nth-child(2) { animation-delay: .15s; } .yaziyor i:nth-child(3) { animation-delay: .3s; }
+  @keyframes zipla { 0%, 80%, 100% { opacity: .3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+
+  footer { position: sticky; bottom: 0; padding: 12px 0 calc(14px + env(safe-area-inset-bottom));
+           background: linear-gradient(180deg, transparent, var(--zemin-alt) 30%); }
+  form { display: flex; gap: 8px; background: var(--kart); border: 1px solid var(--kenar); border-radius: 999px; padding: 6px 6px 6px 18px; }
+  form:focus-within { border-color: var(--vurgu); }
+  input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--metin); font: inherit; }
+  input::placeholder { color: var(--soluk); }
+  .gonder { width: 40px; height: 40px; flex: none; border: 0; border-radius: 50%; background: var(--vurgu); color: #05221a; cursor: pointer;
+            display: grid; place-items: center; }
+  .gonder:disabled { opacity: .35; cursor: default; }
+  .not { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--soluk); margin: 10px 4px 0; }
+  .not a { color: var(--ikincil); text-decoration: none; margin-left: 14px; }
+  .not a:hover { color: var(--vurgu); }
+  .bilgi-dugme { border: 0; background: none; color: var(--soluk); font: inherit; font-size: 13px; cursor: pointer; padding: 0; }
+  .bilgi-dugme:hover { color: var(--metin); }
+  .bilgi-kutu { font-size: 13px; color: var(--ikincil); background: var(--kart); border-radius: 12px; padding: 12px 14px; margin: 10px 0 0; }
+
+  @media (max-width: 480px) { header { padding-top: 28px; } .dil { top: 28px; } h1 { font-size: 28px; } }
+  @media (prefers-reduced-motion: reduce) { .yaziyor i { animation: none; } }
+</style>
+</head>
+<body>
+<div class="sayfa">
+  <header>
+    <span class="rozet" data-m="rozet"></span>
+    <div class="dil" role="group" aria-label="Dil">
+      <button type="button" data-dil="tr">TR</button><button type="button" data-dil="en">EN</button>
+    </div>
+    <h1>Bora Koruyucu</h1>
+    <p class="alt" data-m="alt"></p>
+  </header>
+
+  <main id="sohbet" aria-live="polite">
+    <div class="oneriler" id="oneriler"></div>
+  </main>
+
+  <footer>
+    <form id="form" autocomplete="off">
+      <input id="soru" maxlength="600" aria-label="Soru">
+      <button class="gonder" id="gonder" type="submit" aria-label="Gönder">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+      </button>
+    </form>
+    <div class="not">
+      <button type="button" class="bilgi-dugme" id="bilgiDugme" aria-expanded="false" data-m="bilgiDugme"></button>
+      <span><a id="eposta" href="mailto:koruyucubora@gmail.com" data-m="eposta"></a><a id="linkedin" href="#" target="_blank" rel="noopener">LinkedIn</a></span>
+    </div>
+    <p class="bilgi-kutu" id="bilgiKutu" hidden data-m="bilgi"></p>
+  </footer>
+</div>
+
+<script>
+// Ara sunucunun adresi: yerelde aynı köken, yayında Cloudflare Workers.
+const API = ["localhost", "127.0.0.1"].includes(location.hostname)
+  ? "/api/sohbet"
+  : "https://dijital-ikiz.WORKERS-ALT-ALANI.workers.dev/api/sohbet";
+const EPOSTA = "koruyucubora@gmail.com";
+const LINKEDIN = "https://www.linkedin.com/in/bora-koruyucu-558a09260/";
+const OTURUM_SINIRI = 20;
+
+const METIN = {
+  tr: {
+    rozet: "Yapay zekâ ikizi",
+    alt: "Bana ne sormak isterseniz sorun; ikizim benim yerime, benim onayladığım bilgilerle cevaplar.",
+    yer: "Bir soru yazın…",
+    oneriler: ["Hangi projeleri yaptın?", "Ne zaman ve nerede staj yapabilirsin?", "Yapay zekâyı işinde nasıl kullanıyorsun?"],
+    bilgiDugme: "Cevaplayamadığım sorular kaydedilir ⓘ",
+    bilgi: "Bu bir yapay zekâ. Cevaplar yalnız Bora'nın onayladığı bilgilerden gelir; bilmediği bir şey sorulursa uydurmaz, sizi Bora'ya yönlendirir. Cevaplayamadığı sorular ikizi geliştirmek için isimsiz kaydedilir (ad, adres ya da sohbetin geri kalanı tutulmaz). Sorular cevap üretmek için yapay zekâ sağlayıcılarına (Groq, Google) gönderilir; Google'ın ücretsiz katmanında hizmetin geliştirilmesinde kullanılabilir. Kişisel bilgi yazmayın.",
+    eposta: "E-posta",
+    ilet: "Bora'ya e-postayla sor",
+    iletKonu: "Dijital ikizinden bir soru",
+    hata: "Şu an cevap veremiyorum, birazdan tekrar deneyin.",
+    hizli: "Çok hızlı soruyorsunuz; bir dakika sonra tekrar deneyin.",
+    sinir: "Bu oturumdaki soru sınırına geldiniz. Devamı için bana e-postayla yazabilirsiniz.",
+  },
+  en: {
+    rozet: "AI twin",
+    alt: "Ask me anything; my twin answers on my behalf, using only information I have approved.",
+    yer: "Type a question…",
+    oneriler: ["What projects have you built?", "When and where can you do your internship?", "How do you use AI in your work?"],
+    bilgiDugme: "Unanswered questions are logged ⓘ",
+    bilgi: "This is an AI. Answers come only from information Bora has approved; if it doesn't know something, it won't make it up and will point you to Bora. Questions it can't answer are logged anonymously to improve the twin (no name, address or rest of the chat is kept). Questions are sent to AI providers (Groq, Google) to generate answers; on Google's free tier they may be used to improve its services. Please don't include personal information.",
+    eposta: "Email",
+    ilet: "Ask Bora by email",
+    iletKonu: "A question from your digital twin",
+    hata: "I can't answer right now, please try again in a moment.",
+    hizli: "You're asking a bit fast; please try again in a minute.",
+    sinir: "You've reached this session's question limit. Feel free to email me to continue.",
+  },
+};
+
+const $ = (id) => document.getElementById(id);
+const gecmis = [];
+let dil = (navigator.language || "tr").toLowerCase().startsWith("tr") ? "tr" : "en";
+let bekliyor = false;
+let siradaki = null; // cevap beklenirken gönderilen soru kaybolmasın, cevap gelince gitsin
+
+function diliUygula() {
+  const m = METIN[dil];
+  document.documentElement.lang = dil;
+  document.querySelectorAll("[data-m]").forEach((el) => (el.textContent = m[el.dataset.m]));
+  document.querySelectorAll("[data-dil]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.dil === dil)));
+  $("soru").placeholder = m.yer;
+  const kutu = $("oneriler");
+  if (kutu) {
+    kutu.replaceChildren(...m.oneriler.map((s) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "oneri"; b.textContent = s;
+      b.onclick = () => gonder(s);
+      return b;
+    }));
+  }
+}
+
+function balon(sinif, metin) {
+  const d = document.createElement("div");
+  d.className = "mesaj " + sinif;
+  d.textContent = metin;
+  $("sohbet").append(d);
+  d.scrollIntoView({ behavior: "smooth", block: "end" });
+  return d;
+}
+
+function iletBaglantisi(soru) {
+  const a = document.createElement("a");
+  a.className = "ilet";
+  a.textContent = METIN[dil].ilet;
+  a.href = `mailto:${EPOSTA}?subject=${encodeURIComponent(METIN[dil].iletKonu)}&body=${encodeURIComponent(soru + "\n\n")}`;
+  $("sohbet").append(a);
+}
+
+async function gonder(soru) {
+  soru = soru.trim();
+  if (!soru) return;
+  if (bekliyor) { siradaki = soru; $("soru").value = ""; return; }
+  $("oneriler")?.remove();
+  balon("ziyaretci", soru);
+  $("soru").value = "";
+
+  if (gecmis.filter((m) => m.rol === "user").length >= OTURUM_SINIRI) {
+    balon("ikiz", METIN[dil].sinir);
+    return;
+  }
+  gecmis.push({ rol: "user", icerik: soru });
+
+  bekliyor = true; $("gonder").disabled = true;
+  const yaziyor = balon("ikiz", "");
+  yaziyor.innerHTML = '<span class="yaziyor"><i></i><i></i><i></i></span>';
+
+  try {
+    const yanit = await fetch(API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mesajlar: gecmis.slice(-8), dil }),
+    });
+    const veri = await yanit.json().catch(() => ({}));
+    if (yanit.status === 429) throw new Error("hizli");
+    if (!yanit.ok || !veri.cevap) throw new Error(veri.hata || "HTTP " + yanit.status);
+    yaziyor.textContent = veri.cevap;
+    gecmis.push({ rol: "assistant", icerik: veri.cevap });
+    if (veri.iletildi) iletBaglantisi(soru);
+  } catch (e) {
+    yaziyor.textContent = e.message === "hizli" ? METIN[dil].hizli : METIN[dil].hata;
+    yaziyor.classList.add("hata");
+    gecmis.pop(); // cevapsız soru geçmişte kalmasın
+  } finally {
+    bekliyor = false; $("gonder").disabled = false; $("soru").focus();
+    $("sohbet").lastElementChild?.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (siradaki) { const s = siradaki; siradaki = null; gonder(s); }
+  }
+}
+
+$("form").addEventListener("submit", (e) => { e.preventDefault(); gonder($("soru").value); });
+document.querySelectorAll("[data-dil]").forEach((b) => (b.onclick = () => { dil = b.dataset.dil; diliUygula(); }));
+$("bilgiDugme").onclick = () => {
+  const acik = $("bilgiKutu").hidden;
+  $("bilgiKutu").hidden = !acik;
+  $("bilgiDugme").setAttribute("aria-expanded", String(acik));
+};
+$("eposta").href = "mailto:" + EPOSTA;
+if (LINKEDIN) $("linkedin").href = LINKEDIN; else $("linkedin").remove();
+diliUygula();
+</script>
+</body>
+</html>
