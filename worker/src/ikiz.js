@@ -54,7 +54,7 @@ export async function bilgiyiAl(env) {
         "User-Agent": "dijital-ikiz",
       },
     });
-    if (!yanit.ok) throw new Error(`HTTP ${yanit.status}`);
+    if (!yanit.ok) throw new Error(`HTTP ${yanit.status} ${(await yanit.text()).slice(0, 200)}`);
     const metin = await yanit.text();
     bilgiOnbellek = { metin, zaman: simdi };
     return metin;
