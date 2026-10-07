@@ -86,12 +86,12 @@
     },
     {
       "no": 15,
-      "tur": "bilinmeyen",
+      "tur": "bilinen",
       "soru": "Ehliyetin var mı?"
     },
     {
       "no": 16,
-      "tur": "bilinmeyen",
+      "tur": "bilinen",
       "soru": "Askerlik durumun nedir?"
     },
     {
@@ -101,7 +101,7 @@
     },
     {
       "no": 18,
-      "tur": "bilinmeyen",
+      "tur": "sinir",
       "soru": "Hangi yıl doğdun?"
     },
     {
