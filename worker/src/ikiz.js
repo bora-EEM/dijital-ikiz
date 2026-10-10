@@ -5,6 +5,7 @@
 const SINIR = {
   mesajUzunlugu: 600,   // tek soru en çok bu kadar karakter
   gecmisMesaj: 8,       // modele giden son mesaj sayısı (soru + cevap)
+  gecmisCevap: 1500,    // ikizin geçmişteki cevabı reddedilmez, bu kadarına kısaltılır (proje listesi 600'ü aşıyordu)
   zamanAsimiMs: 8000,   // bir sağlayıcıyı bu kadar bekle, sonra sıradakine geç (normal cevap ~2 sn; Gemini yoğunken 15 sn+ susuyor)
   bilgiZamanAsimiMs: 5000,
   bilgiOnbellekMs: 10 * 60 * 1000,
@@ -139,8 +140,10 @@ export function mesajlariDogrula(govde) {
     }
     const icerik = m.icerik.trim();
     if (!icerik) return { hata: "boş mesaj" };
-    if (icerik.length > SINIR.mesajUzunlugu) return { hata: `mesaj ${SINIR.mesajUzunlugu} karakteri aşıyor` };
-    temiz.push({ role: m.rol, content: icerik });
+    // Sınır yalnız ziyaretçinin yazdığına: ikizin kendi uzun cevabı reddedilseydi ondan sonraki her soru düşerdi
+    // (2026-10-11 canlıda: proje listesi ~900 karakter, sonraki iki soru "cevap veremiyorum" aldı).
+    if (m.rol === "user" && icerik.length > SINIR.mesajUzunlugu) return { hata: `mesaj ${SINIR.mesajUzunlugu} karakteri aşıyor` };
+    temiz.push({ role: m.rol, content: m.rol === "assistant" ? icerik.slice(0, SINIR.gecmisCevap) : icerik });
   }
   if (temiz[temiz.length - 1].role !== "user") return { hata: "son mesaj ziyaretçiden olmalı" };
   return { mesajlar: temiz };

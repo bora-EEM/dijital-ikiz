@@ -281,3 +281,14 @@ test("dil: Türkçe ad taşıyan İngilizce soru İngilizce, tek kısa kelime so
   assert.equal(soruDili("Kod yazabiliyor musun?", "en"), "tr");
   assert.equal(soruDili("Ehliyetin var mı?", "en"), "tr");
 });
+
+test("ikizin uzun önceki cevabı sonraki soruyu düşürmez, kısaltılır; ziyaretçinin uzun mesajı yine reddedilir", () => {
+  const { mesajlar, hata } = mesajlariDogrula({ mesajlar: [
+    { rol: "user", icerik: "Hangi projeleri yaptın?" },
+    { rol: "assistant", icerik: "p".repeat(2000) },
+    { rol: "user", icerik: "Bize ne katabilirsin?" },
+  ] });
+  assert.equal(hata, undefined);
+  assert.equal(mesajlar[1].content.length, 1500);
+  assert.ok(mesajlariDogrula({ mesajlar: [{ rol: "user", icerik: "a".repeat(601) }] }).hata);
+});
