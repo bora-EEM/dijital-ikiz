@@ -191,3 +191,93 @@ test("modele tek sistem mesajı gider; BİLGİ ve dil notu onun içinde (Gemini 
     globalThis.fetch = gercekFetch;
   }
 });
+
+test("Türkçe harfsiz, yazım hatalı Türkçe soru Türkçe sayılır; belirsiz soru sohbetin dilini alır", async () => {
+  const { soruDili, sohbetDili } = await import("../worker/src/ikiz.js");
+  assert.equal(soruDili("hangi programlama dilelrini biliyosun", "en"), "tr"); // İngilizce tarayıcı, 2026-10-08
+  assert.equal(soruDili("Do you have a driving licence?", "tr"), "en");
+  const sohbet = (...sorular) => sorular.map((content) => ({ role: "user", content }));
+  assert.equal(sohbetDili(sohbet("Projelerin neler?", "Docker?"), "en"), "tr");
+  assert.equal(sohbetDili(sohbet("What projects have you built?", "Docker?"), "tr"), "en");
+});
+
+test("üçüncü yuva Cloudflare Workers AI: ilk ikisi düşünce o cevaplar", async () => {
+  const { cevapla, saglayicilar } = await import("../worker/src/ikiz.js");
+  const AI = { run: async (model, govde) => {
+    assert.equal(govde.messages[0].role, "system");
+    return { choices: [{ message: { content: '{"tur":"A","cevap":"İngilizcem B2."}' } }] };
+  } };
+  assert.deepEqual(saglayicilar({ GEMINI_API_KEY: "m", GROQ_API_KEY: "g", AI }).map((s) => s.ad),
+    ["gemini:gemini-3.5-flash-lite", "groq:openai/gpt-oss-120b", "cloudflare:@cf/openai/gpt-oss-120b"]);
+  const f = sahteFetch([{ durum: 503, govde: "yoğun" }, { durum: 429, govde: "kota" }]);
+  try {
+    const s = await cevapla([{ role: "user", content: "İngilizce seviyen?" }], { BILGI_METNI: "B2", GEMINI_API_KEY: "m", GROQ_API_KEY: "g", AI });
+    assert.equal(s.durum, 200);
+    assert.equal(s.saglayici, "cloudflare:@cf/openai/gpt-oss-120b");
+  } finally { f.geriAl(); }
+});
+
+test("hepsi düşünce 'birkaç saniye sonra' diyen sağlayıcı bir kez daha denenir", async () => {
+  const { cevapla } = await import("../worker/src/ikiz.js");
+  const giden = [];
+  const gercek = globalThis.fetch;
+  const sira = [
+    new Response("yoğun", { status: 503 }),
+    new Response("kota", { status: 429, headers: { "retry-after": "1" } }),
+    new Response(JSON.stringify({ choices: [{ message: { content: '{"tur":"A","cevap":"B2."}' } }] }), { status: 200 }),
+  ];
+  globalThis.fetch = async (url) => { giden.push(String(url)); return sira.shift(); };
+  try {
+    const beklenen = [];
+    const s = await cevapla([{ role: "user", content: "İngilizce seviyen?" }], { BILGI_METNI: "B2", GEMINI_API_KEY: "m", GROQ_API_KEY: "g" },
+      "tr", async (ms) => { beklenen.push(ms); });
+    assert.equal(s.durum, 200);
+    assert.equal(s.saglayici, "groq:openai/gpt-oss-120b");
+    assert.equal(giden.length, 3);
+    assert.deepEqual(beklenen, [1000]);
+  } finally { globalThis.fetch = gercek; }
+});
+
+test("uzun bekleme isteyen ya da yeniden denemede de düşen sağlayıcı 503'e varır; ziyaretçi sonsuz beklemez", async () => {
+  const { cevapla } = await import("../worker/src/ikiz.js");
+  const gercek = globalThis.fetch;
+  const env = { BILGI_METNI: "B2", GEMINI_API_KEY: "m", GROQ_API_KEY: "g" };
+  const soru = [{ role: "user", content: "İngilizce seviyen?" }];
+  let sira = [new Response("yoğun", { status: 503 }), new Response("kota", { status: 429, headers: { "retry-after": "30" } })];
+  globalThis.fetch = async () => sira.shift();
+  const beklenen = [];
+  try {
+    const s = await cevapla(soru, env, "tr", async (ms) => { beklenen.push(ms); });
+    assert.equal(s.durum, 503);
+    assert.deepEqual(beklenen, []); // 30 sn sınırı aşıyor, beklenmez
+    sira = [
+      new Response("yoğun", { status: 503 }),
+      new Response("kota", { status: 429, headers: { "retry-after": "2" } }),
+      new Response("kota", { status: 429, headers: { "retry-after": "2" } }),
+    ];
+    const t = await cevapla(soru, env, "tr", async (ms) => { beklenen.push(ms); });
+    assert.equal(t.durum, 503);
+    assert.deepEqual(beklenen, [2000]); // yalnız bir kez
+  } finally { globalThis.fetch = gercek; }
+});
+
+test("Cloudflare yuvası: hata ve eski 'response' biçimi doğru okunur", async () => {
+  const { cevapla } = await import("../worker/src/ikiz.js");
+  const firlatan = { run: async () => { throw new Error("3040: kapasite yok"); } };
+  const s = await cevapla([{ role: "user", content: "İngilizce seviyen?" }], { BILGI_METNI: "B2", AI: firlatan });
+  assert.equal(s.durum, 503);
+  assert.match(s.denemeler[0].neden, /^hata: 3040/);
+  const eski = { run: async () => ({ response: { tur: "A", cevap: "İngilizcem B2." } }) };
+  const t = await cevapla([{ role: "user", content: "İngilizce seviyen?" }], { BILGI_METNI: "B2", AI: eski });
+  assert.equal(t.durum, 200);
+  assert.equal(t.cevap, "İngilizcem B2.");
+});
+
+test("dil: Türkçe ad taşıyan İngilizce soru İngilizce, tek kısa kelime sohbete kalır", async () => {
+  const { soruDili } = await import("../worker/src/ikiz.js");
+  assert.equal(soruDili("What did you study at Uludağ?", "tr"), "en");
+  assert.equal(soruDili("Tell me about Gün İzi", "tr"), "en");
+  assert.equal(soruDili("Mi Band app?", "en"), "en");
+  assert.equal(soruDili("Kod yazabiliyor musun?", "en"), "tr");
+  assert.equal(soruDili("Ehliyetin var mı?", "en"), "tr");
+});

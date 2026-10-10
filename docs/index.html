@@ -14,10 +14,14 @@
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   html { scroll-padding-bottom: 150px; } /* yapışkan yazı kutusu son mesajı örtmesin */
-  body {
+  /* Zemin sabit bir katmanda: gövdeye verilince sayfa uzadıkça üstteki ışık aşağıda tekrar ediyordu (2026-10-08). */
+  body { background: var(--zemin-alt); }
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
     background: radial-gradient(ellipse 70% 45% at 0% 0%, rgba(32, 214, 160, .16), transparent 70%),
-                linear-gradient(180deg, var(--zemin-ust), var(--zemin-alt)) fixed;
-    background-color: var(--zemin-alt);
+                linear-gradient(180deg, var(--zemin-ust), var(--zemin-alt));
+  }
+  body {
     color: var(--metin);
     font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;

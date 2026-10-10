@@ -25,7 +25,7 @@ Ziyaretçi ──► GitHub Pages (docs/index.html)
             Cloudflare Worker (worker/)          anahtarlar burada, tarayıcıya hiç gelmez
               ├─ bilgi dosyasını gizli depodan alır (10 dk önbellek)
               ├─ kurallı istemle ücretsiz modellere sırayla sorar:
-              │    Gemini 3.5 Flash-Lite → Groq gpt-oss-120b (yedek)
+              │    Gemini 3.5 Flash-Lite → Groq gpt-oss-120b → Cloudflare Workers AI gpt-oss-120b
               ├─ model önce sorunun türünü seçer: bilgide var / bilinçli sınır / bilgide yok / konu dışı
               │    son ikisinde cevabı model değil sunucu yazar, uydurma imkânı kalmaz
               └─ "bilgide yok" sorusunu gizli depoya issue olarak yazar
@@ -36,6 +36,9 @@ Ziyaretçi ──► GitHub Pages (docs/index.html)
 
 Sağlayıcı sırası sınavla belirlendi: Gemini 3.5 Flash-Lite 25 sorunun 25'ini sıfır uydurmayla geçti; Groq bilinen
 soruları "bilmiyorum" sanmaya yatkın ve ücretsiz kotası (dakikada 8.000, günde 200.000 token) günde ~50 soruya yetiyor.
+Üçüncü yuva Cloudflare Workers AI (sunucuyla aynı yerde, anahtarsız `AI` bağlaması); 2026-10-11 sınavında 25/25, sıfır
+uydurma. Gemini yoğunken Groq'un dakikalık sınırı art arda iki soruda doluyordu, üçüncü yuva bunun için. Hepsi
+düşerse ve biri "birkaç saniye sonra" derse o bir kez daha denenir, toplam bekleme ~22 sn ile sınırlı.
 Sınavı tam geçmeyen model sıraya girmez.
 
 ## Uydurmama sınavı
@@ -56,7 +59,8 @@ python sinav/kos.py --saglayici gemini:gemini-3.5-flash-lite
 ## Yerelde çalıştırma
 
 `worker/.dev.vars` dosyasına `GEMINI_API_KEY` ve `GROQ_API_KEY` yazın (git dışı), bilgi dosyasını `../bilgi/bilgi.md`
-yoluna koyun, sonra (sunucu yalnız bu bilgisayardan erişilir):
+yoluna koyun. Cloudflare yuvasını yerelde de denemek için ortamda `CF_HESAP` (hesap kimliği) ve `CF_AI_TOKEN` (Workers
+AI izinli erişim anahtarı) verin; verilmezse o yuva yerelde atlanır. Sonra (sunucu yalnız bu bilgisayardan erişilir):
 
 ```bash
 npm run yerel

@@ -32,6 +32,22 @@ const env = {
 };
 if (process.env.KAYIT !== "1") delete env.GITHUB_TOKEN; // yerelde kayıt varsayılan kapalı
 
+// Yerelde Workers AI bağlaması yok; hesap kimliği ve erişim anahtarı ortamdan verilirse aynı modele REST ile gidilir
+// (sınavın üçüncü yuvayı da koşabilmesi için). Değerler yazdırılmaz.
+if (process.env.CF_HESAP && process.env.CF_AI_TOKEN) {
+  env.AI = {
+    run: async (model, govde) => {
+      const yanit = await fetch(`https://api.cloudflare.com/client/v4/accounts/${process.env.CF_HESAP}/ai/run/${model}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${process.env.CF_AI_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify(govde),
+      });
+      if (!yanit.ok) throw new Error(`HTTP ${yanit.status} ${(await yanit.text()).slice(0, 200)}`);
+      return (await yanit.json()).result;
+    },
+  };
+}
+
 const TURLER = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml" };
 
 createServer(async (req, res) => {
