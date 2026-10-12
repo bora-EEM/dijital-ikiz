@@ -50,7 +50,7 @@ test("onaylanmamış taslak yayında konuşmaz", async () => {
   assert.equal(bilgiOnayliMi("LinkedIn: `[ONAY: profil adresi]`"), false);
   assert.equal(bilgiOnayliMi("LinkedIn: linkedin.com/in/x"), true);
   const istek = new Request("http://x/api/sohbet", {
-    method: "POST",
+    method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ mesajlar: [{ rol: "user", icerik: "merhaba" }] }),
   });
   const yanit = await istegiIsle(istek, { BILGI_METNI: "[ONAY: x]", GROQ_API_KEY: "yok" }, null);
@@ -80,7 +80,7 @@ function sahteFetch(cevaplar) {
 }
 const modelCevabi = (icerik) => ({ govde: { choices: [{ message: { content: icerik } }] } });
 const sohbetIstegi = (icerik) => new Request("http://x/api/sohbet", {
-  method: "POST", body: JSON.stringify({ mesajlar: [{ rol: "user", icerik }] }),
+  method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mesajlar: [{ rol: "user", icerik }] }),
 });
 
 test("ilk sağlayıcı düşerse ya da bozuk JSON dönerse sıradakine geçilir", async () => {
@@ -291,4 +291,9 @@ test("ikizin uzun önceki cevabı sonraki soruyu düşürmez, kısaltılır; ziy
   assert.equal(hata, undefined);
   assert.equal(mesajlar[1].content.length, 1500);
   assert.ok(mesajlariDogrula({ mesajlar: [{ rol: "user", icerik: "a".repeat(601) }] }).hata);
+});
+
+test("JSON'un arkasındaki tek ` ya da önündeki açıklama cevabı düşürmez", () => {
+  assert.equal(cevabiCoz('{"tur": "C", "cevap": ""}`', "tr", "x").tur, "C");
+  assert.equal(cevabiCoz('İşte cevap: {"tur":"A","cevap":"B2."}', "tr", "x").cevap, "B2.");
 });

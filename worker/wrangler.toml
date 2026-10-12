@@ -1,5 +1,7 @@
 # Cloudflare Workers ayarı. Gizli değerler buraya YAZILMAZ; `npx wrangler secret put <AD>` ile girilir:
-#   GEMINI_API_KEY, GROQ_API_KEY, GITHUB_TOKEN (yalnız bilgi deposunda Contents: read + Issues: write)
+#   GEMINI_API_KEY, GROQ_API_KEY, GITHUB_TOKEN (yalnız bilgi deposunda Contents: read + Issues: write),
+#   GEMINI_UCRETLI_API_KEY (paralı yuva; yoksa o yuva kapalı),
+#   TURNSTILE_SECRET, IMZA_SIRRI, SINAV_ANAHTARI (araclar/guvenlik_sirlari.py kurar, değer yazdırmaz)
 name = "dijital-ikiz"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
@@ -18,9 +20,28 @@ simple = { limit = 8, period = 60 }
 [ai]
 binding = "AI"
 
+# Kalıcı sayaç (src/sayac.js): günlük soru sınırları, paralı model harcaması, issue spam engeli, bilgi yedeği.
+# Ücretsiz planda SQLite tabanlı Durable Object.
+[[durable_objects.bindings]]
+name = "SAYAC"
+class_name = "Sayac"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Sayac"]
+
 [vars]
 BILGI_DEPO = "bora-EEM/dijital-ikiz-bilgi"
 IZINLI_KOKENLER = "https://bora-eem.github.io"
 ILETISIM_EPOSTA = "koruyucubora@gmail.com"
 GEMINI_MODELLER = "gemini-3.5-flash-lite"
 GROQ_MODELLER = "openai/gpt-oss-120b"
+# Bot doğrulaması ve imza sırları yoksa sunucu açık kalmaz, cevap vermez (yanlış yapılandırma sessizce açık kapı olmasın).
+TURNSTILE_ZORUNLU = "1"
+# Günlük sınırlar (src/sayac.js varsayılanlarıyla aynı; buradan değiştirilir).
+GUNLUK_SORU = "400"
+IP_GUNLUK = "60"
+OTURUM_SORU = "20"
+GUNLUK_KAYIT = "30"
+GUNLUK_BUTCE_USD = "1"
+GEMINI_UCRETLI_MODELLER = "gemini-3.8-flash"

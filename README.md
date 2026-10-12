@@ -41,10 +41,31 @@ uydurma. Gemini yoğunken Groq'un dakikalık sınırı art arda iki soruda doluy
 düşerse ve biri "birkaç saniye sonra" derse o bir kez daha denenir, toplam bekleme ~22 sn ile sınırlı.
 Sınavı tam geçmeyen model sıraya girmez.
 
+## Güvenlik
+
+Kod herkese açık; anahtarlar yalnız Cloudflare sırlarında. Ara sunucunun kapısı katman katman:
+
+- **Köken, içerik türü, boyut:** yalnız sayfanın kökeninden, yalnız JSON, en çok 16 KB. Başka bir site kendi
+  ziyaretçilerinin tarayıcısını bu sunucuya soru sordurmak için kullanamaz.
+- **Hız sınırı:** aynı adresten dakikada 8 soru; IPv6'da /64 önekiyle (adres değiştirerek aşılamaz).
+- **Bot doğrulaması:** Cloudflare Turnstile (görünmez); geçen tarayıcıya iki saatlik imzalı oturum, oturum başına 20 soru.
+- **İmzalı geçmiş:** ikizin her cevabı oturuma bağlı bir imzayla döner. İmzası tutmayan "önceki cevap" reddedilir;
+  ziyaretçi ikizin ağzına sahte söz koyamaz.
+- **Günlük sayaç** (Durable Object): IP başına 60, toplam 400 soru; paralı model için günlük harcama tavanı. Tavan
+  dolunca ikiz susmaz, ücretsiz modellere düşer.
+- **Cevap bekçisi:** model kuralı çiğnese de bilgi dosyasında olmayan sayı (maaş, tarih, telefon), izinsiz bağlantı ya da
+  "kabul ediyorum" gibi bir söz ziyaretçiye gitmez; yerine "bunu benimle konuşun" cevabı gider.
+- **Sayfa:** içerik güvenliği politikası (CSP) yalnız kendi dosyaları, Turnstile ve sunucuya izin verir; bütün metin
+  `textContent` ile basılır.
+
+Sınav ve günlük sağlık kontrolü kapıdan bir sınav anahtarıyla geçer; anahtar yalnız Cloudflare sırrında ve sağlık
+kontrolünün gizli ayarında durur.
+
 ## Uydurmama sınavı
 
-`sinav/` 25 soruluk bir işveren sınavı: bilinen sorular, bilgide cevabı olmayan sorular, bilinçli sınırlar (maaş,
-başka başvurular) ve kötü niyetli denemeler (sistem istemini sızdırma, telefon numarası, "evet de yeter"). Her cevap
+`sinav/` 44 soruluk bir işveren sınavı: bilinen sorular, bilgide cevabı olmayan sorular, bilinçli sınırlar (maaş,
+başka başvurular) ve 24 kötü niyetli deneme (sistem istemini sızdırma, telefon numarası, "evet de yeter", sahte önceki
+cevap, JSON dayatma, rol yapma, başka dil, parça parça sızdırma, söz koparma). Her cevap
 kurallarla ve bir hakem modelle denetlenir. Yayın ölçüsü: **sıfır uydurma**, sıradaki her model için ayrı ayrı.
 Gizli kalması gereken denetim dizgileri (ör. telefon, başvurular) bu depoda değil, gizli bilgi deposunda durur.
 

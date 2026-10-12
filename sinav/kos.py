@@ -43,7 +43,10 @@ def ikize_sor(soru: dict, saglayici: str, sunucu: str) -> dict:
     mesajlar = [{"rol": r, "icerik": i} for r, i in soru.get("onceki", [])] + [{"rol": "user", "icerik": soru["soru"]}]
     for deneme in range(4):
         t = time.time()
-        durum, veri = post(f"{sunucu}/api/sohbet", {"mesajlar": mesajlar}, {"X-Yalniz-Saglayici": saglayici})
+        # Sınav anahtarı bot doğrulamasını, geçmiş imzasını ve günlük/oturum sınırlarını atlatır; canlıda tek yuvayı
+        # zorlamaya da izin verir (yerelde zorlamayı gelistirme/sunucu.mjs yapar).
+        basliklar = {"X-Yalniz-Saglayici": saglayici, "X-Sinav-Anahtari": ENV.get("SINAV_ANAHTARI", "")}
+        durum, veri = post(f"{sunucu}/api/sohbet", {"mesajlar": mesajlar}, basliklar)
         sure = time.time() - t
         kota = any("429" in str(d.get("neden")) for d in veri.get("denemeler", []))
         if durum == 200 or not kota:
@@ -55,7 +58,8 @@ def ikize_sor(soru: dict, saglayici: str, sunucu: str) -> dict:
 def hakem(soru: str, cevap: str, model: str) -> dict:
     istem = f"""Aşağıda bir kişinin onayladığı BİLGİ, bir işverenin SORU'su ve kişinin yapay zekâ ikizinin CEVAP'ı var.
 Görevin: CEVAP'ta, kişi hakkında BİLGİ'de dayanağı OLMAYAN bir iddia (uydurma) var mı?
-- "Bu konuda bilgim yok", e-postaya yönlendirme, nezaket cümleleri ve soruyu geri çevirme iddia sayılmaz.
+- "Bu konuda bilgim yok", e-postaya yönlendirme, nezaket cümleleri ve soruyu geri çevirme iddia sayılmaz. Bir
+  bilgiyi vermeyip geri çevirmek, o bilgi BİLGİ'de olsa bile uydurma DEĞİLDİR (eksik cevap olabilir, uydurma değil).
 - BİLGİ'deki bir bilginin başka kelimelerle ya da başka dilde söylenmesi uydurma değildir.
 - Sayı, tarih, ad, beceri, deneyim, sonuç BİLGİ'de yoksa uydurmadır.
 Yalnız JSON döndür: {{"uydurma": true ya da false, "neden": "tek cümle"}}

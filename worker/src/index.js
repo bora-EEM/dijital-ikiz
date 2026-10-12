@@ -1,45 +1,72 @@
 // Ara sunucu: anahtarları ve bilgi dosyasını tarayıcıdan uzak tutar. Tek uç nokta: POST /api/sohbet.
 // Hatalar ziyaretçiye tek cümle döner; ayrıntı yalnız sunucu günlüğüne (Cloudflare: Workers → Logs) yazılır.
-import { cevapla, mesajlariDogrula, soruyuKaydet } from "./ikiz.js";
+//
+// Kapıdaki katmanlar, sırayla (her biri bir kötüye kullanım yolunu kapatır):
+//   1. Köken, içerik türü, gövde boyutu: başka bir site kendi ziyaretçilerinin tarayıcısını bize soru sordurmak için
+//      kullanamaz (JSON zorunluluğu tarayıcıyı ön kontrole zorlar, izinsiz köken 403).
+//   2. Dakikalık hız sınırı, IPv6'da /64 önekiyle (adres değiştirerek aşılamaz).
+//   3. Bot doğrulaması (Turnstile) → iki saatlik imzalı oturum; oturum başına soru tavanı.
+//   4. İmzalı geçmiş: ikizin önceki cevapları sunucunun imzasıyla döner, sahte "önceki cevap" reddedilir.
+//   5. Kalıcı günlük sayaç: IP başına, oturum başına, toplam; paralı model için günlük harcama tavanı.
+// Sınav ve sağlık kontrolü X-Sinav-Anahtari ile 3 ve 4'ü atlar (anahtar yalnız Cloudflare sırrında ve Bora'da).
+import { bilgiyiAl, cevapla, mesajlariDogrula, soruyuKaydet } from "./ikiz.js";
+import { sayacaSor, Sayac } from "./sayac.js";
+import { ipAnahtari, cevapImzasi, cevapImzasiDogru, oturumOlustur, oturumDogrula, turnstileDogrula, esit } from "./guvenlik.js";
 
-// Aynı adresten dakikada en çok bu kadar soru. Yayında Cloudflare'in hız sınırı bağlaması (HIZ_SINIRI, wrangler.toml)
-// bütün sunucu örnekleri için ortak sayar; yoksa (yerel) bellekteki sayaç kullanılır.
+export { Sayac };
+
 const DAKIKALIK_SORU = 8;
+const GOVDE_SINIRI = 16 * 1024;
 const sayac = new Map();
+let bellekUyarisi = false;
 
-async function hizSiniriAsildi(ip, env) {
+async function hizSiniriAsildi(anahtar, env) {
   if (env.HIZ_SINIRI?.limit) {
-    const { success } = await env.HIZ_SINIRI.limit({ key: ip });
+    const { success } = await env.HIZ_SINIRI.limit({ key: anahtar });
     return !success;
   }
+  if (!bellekUyarisi && env.GELISTIRME !== "1") {
+    console.error("HIZ_SINIRI bağlaması yok: dakikalık sınır bellekte, örnek başına");
+    bellekUyarisi = true;
+  }
   const simdi = Date.now();
-  const kayit = (sayac.get(ip) || []).filter((t) => simdi - t < 60_000);
+  const kayit = (sayac.get(anahtar) || []).filter((t) => simdi - t < 60_000);
   kayit.push(simdi);
-  sayac.set(ip, kayit);
+  sayac.set(anahtar, kayit);
   if (sayac.size > 5000) sayac.clear();
   return kayit.length > DAKIKALIK_SORU;
 }
 
+function izinliKokenler(env) {
+  return (env.IZINLI_KOKENLER || "").split(",").map((k) => k.trim()).filter(Boolean);
+}
+
 function corsBasliklari(istek, env) {
   const koken = istek.headers.get("Origin") || "";
-  const izinli = (env.IZINLI_KOKENLER || "").split(",").map((k) => k.trim()).filter(Boolean);
   const basliklar = {
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
-  if (izinli.includes(koken)) basliklar["Access-Control-Allow-Origin"] = koken;
+  if (izinliKokenler(env).includes(koken)) basliklar["Access-Control-Allow-Origin"] = koken;
   return basliklar;
 }
 
 function json(veri, durum, basliklar) {
   return new Response(JSON.stringify(veri), {
     status: durum,
-    headers: { "Content-Type": "application/json; charset=utf-8", ...basliklar },
+    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...basliklar },
   });
 }
 
 const GENEL_HATA = "Şu an cevap veremiyorum, birazdan tekrar deneyin.";
+const SINIR_METNI = {
+  hiz: "Çok hızlı soruyorsunuz, bir dakika sonra tekrar deneyin.",
+  gunluk: "Bugünlük soru sınırına geldiniz. Devamı için bana e-postayla yazabilirsiniz.",
+  oturum: "Bu oturumdaki soru sınırına geldiniz. Devamı için bana e-postayla yazabilirsiniz.",
+  genel: "İkiz bugün çok soru aldı. Devamı için bana e-postayla yazabilirsiniz.",
+};
 
 export async function istegiIsle(istek, env, ctx) {
   const url = new URL(istek.url);
@@ -47,27 +74,109 @@ export async function istegiIsle(istek, env, ctx) {
   const gelistirme = env.GELISTIRME === "1";
 
   if (istek.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+  // Dış izleme için hafif uç: yapay zekâ çağırmaz, yalnız bilgi dosyasına ulaşılıyor mu ve sayaç çalışıyor mu.
+  if (url.pathname === "/saglik" && istek.method === "GET") {
+    if (await hizSiniriAsildi(`saglik-${ipAnahtari(istek.headers.get("CF-Connecting-IP") || "yerel")}`, env)) {
+      return json({ hata: SINIR_METNI.hiz, kod: "hiz" }, 429, cors);
+    }
+    try {
+      await bilgiyiAl(env);
+      await sayacaSor(env, { islem: "butce" });
+      return json({ tamam: true }, 200, cors);
+    } catch (e) {
+      console.error(`sağlık ucu: ${e.message}`);
+      return json({ tamam: false }, 503, cors);
+    }
+  }
   if (url.pathname !== "/api/sohbet") return json({ hata: "bulunamadı" }, 404, cors);
   if (istek.method !== "POST") return json({ hata: "yalnız POST" }, 405, cors);
 
-  const ip = istek.headers.get("CF-Connecting-IP") || "yerel";
-  if (await hizSiniriAsildi(ip, env)) return json({ hata: "Çok hızlı soruyorsunuz, bir dakika sonra tekrar deneyin." }, 429, cors);
-
+  // 1. Köken, içerik türü, boyut.
+  const koken = istek.headers.get("Origin");
+  if (koken && !izinliKokenler(env).includes(koken)) return json({ hata: "izinsiz köken" }, 403, cors);
+  if (!(istek.headers.get("Content-Type") || "").toLowerCase().startsWith("application/json")) {
+    return json({ hata: "yalnız JSON" }, 415, cors);
+  }
+  if (Number(istek.headers.get("Content-Length") || 0) > GOVDE_SINIRI) return json({ hata: "istek çok büyük" }, 413, cors);
+  const ham = await istek.text();
+  if (ham.length > GOVDE_SINIRI) return json({ hata: "istek çok büyük" }, 413, cors);
   let govde;
   try {
-    govde = await istek.json();
+    govde = JSON.parse(ham);
   } catch {
     return json({ hata: "geçersiz JSON" }, 400, cors);
   }
+
+  const sinav = Boolean(env.SINAV_ANAHTARI) && esit(istek.headers.get("X-Sinav-Anahtari") || "", env.SINAV_ANAHTARI);
+
+  // 2. Dakikalık hız sınırı.
+  const ip = istek.headers.get("CF-Connecting-IP") || "";
+  const ipKey = ipAnahtari(ip || "yerel");
+  if (await hizSiniriAsildi(ipKey, env)) return json({ hata: SINIR_METNI.hiz, kod: "hiz" }, 429, cors);
+
+  // 3. Bot doğrulaması ve oturum. Turnstile sırrı yoksa (yerel) oturum IP'ye bağlanır.
+  let oturum = null;
+  let yeniJeton = null;
+  if (!sinav) {
+    if (env.TURNSTILE_SECRET && env.IMZA_SIRRI) {
+      oturum = await oturumDogrula(env.IMZA_SIRRI, govde?.oturum);
+      if (!oturum) {
+        if (!(await turnstileDogrula(env.TURNSTILE_SECRET, govde?.dogrulama, ip, env.TURNSTILE_ALAN || "bora-eem.github.io"))) {
+          return json({ hata: "Doğrulama gerekiyor.", kod: "dogrulama" }, 401, cors);
+        }
+        ({ kimlik: oturum, jeton: yeniJeton } = await oturumOlustur(env.IMZA_SIRRI));
+      }
+    } else {
+      if (env.TURNSTILE_ZORUNLU === "1") {
+        console.error("TURNSTILE_SECRET ya da IMZA_SIRRI yok ama zorunlu: istek reddedildi");
+        return json({ hata: GENEL_HATA }, 503, cors);
+      }
+      oturum = `ip-${ipKey}`;
+    }
+  }
+
   const { mesajlar, hata } = mesajlariDogrula(govde);
   if (hata) return json({ hata }, 400, cors);
 
+  // 4. İmzalı geçmiş: her "asistan" mesajı bu oturumda sunucunun verdiği imzayı taşımalı.
+  if (!sinav && env.IMZA_SIRRI) {
+    const gelen = Array.isArray(govde.mesajlar) ? govde.mesajlar.slice(-8) : [];
+    for (const m of gelen) {
+      if (m?.rol !== "assistant") continue;
+      if (!(await cevapImzasiDogru(env.IMZA_SIRRI, oturum, m.icerik, m.imza))) {
+        // Yeni oturum açıldıysa jeton yine döner: sayfa geçmişsiz tekrar sorarken doğrulamayı baştan istemesin.
+        return json({ hata: "Sohbet geçmişi doğrulanamadı.", kod: "gecmis", ...(yeniJeton ? { oturum: yeniJeton } : {}) }, 409, cors);
+      }
+    }
+  }
+
+  // 5. Günlük sayaç. Sayaca ulaşılamazsa kapalı kalınır (sınırsız açık kalmaktansa).
+  let izin;
+  try {
+    izin = await sayacaSor(env, { islem: "izin", ip: ipKey, oturum, sinav });
+  } catch (e) {
+    console.error(`sayaç ulaşılamadı: ${e.message}`);
+    return json({ hata: GENEL_HATA }, 503, cors);
+  }
+  if (!izin.tamam) return json({ hata: SINIR_METNI[izin.kod] || GENEL_HATA, kod: izin.kod }, 429, cors);
+
+  // Paralı model yalnız günlük bütçe dolmadıysa (izin cevabı bütçeyi de taşır). Sınav anahtarıyla gelen istek tek bir
+  // yuvayı zorlayabilir: canlıda her yuva ayrı sınanır (paralı yuva sıraya ancak sınavı geçince girer).
+  let calismaEnv = izin.butceDoldu !== false ? { ...env, UCRETLI_KAPALI: "1" } : env;
+  const zorla = sinav && istek.headers.get("X-Yalniz-Saglayici");
+  if (zorla) calismaEnv = { ...env, YALNIZ_SAGLAYICI: zorla };
+
   let sonuc;
   try {
-    sonuc = await cevapla(mesajlar, env, govde?.dil === "en" ? "en" : "tr");
+    sonuc = await cevapla(mesajlar, calismaEnv, govde?.dil === "en" ? "en" : "tr");
   } catch (e) {
     console.error(`cevaplanamadı: ${e.message}`);
     return json(gelistirme ? { hata: GENEL_HATA, ayrinti: e.message } : { hata: GENEL_HATA }, 503, cors);
+  }
+  if (sonuc.maliyetUsd > 0) {
+    const harca = sayacaSor(env, { islem: "harca", usd: sonuc.maliyetUsd }).catch((e) => console.error(`harcama yazılamadı: ${e.message}`));
+    if (ctx?.waitUntil) ctx.waitUntil(harca);
+    else await harca;
   }
   if (sonuc.durum !== 200) {
     console.error(`cevap yok: ${sonuc.hata} ${JSON.stringify(sonuc.denemeler)}`);
@@ -89,7 +198,9 @@ export async function istegiIsle(istek, env, ctx) {
     else await kayit;
   }
   const yanit = { cevap: sonuc.cevap, iletildi: sonuc.iletildi };
-  if (gelistirme) Object.assign(yanit, { tur: sonuc.tur, saglayici: sonuc.saglayici });
+  if (!sinav && env.IMZA_SIRRI) yanit.imza = await cevapImzasi(env.IMZA_SIRRI, oturum, sonuc.cevap);
+  if (yeniJeton) yanit.oturum = yeniJeton;
+  if (gelistirme || sinav) Object.assign(yanit, { tur: sonuc.tur, saglayici: sonuc.saglayici, ...(sonuc.bekci ? { bekci: sonuc.bekci } : {}) });
   return json(yanit, 200, cors);
 }
 

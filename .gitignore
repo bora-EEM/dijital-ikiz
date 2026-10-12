@@ -8,3 +8,6 @@ node_modules/
 .wrangler/
 sinav/sonuc/
 __pycache__/
+# Ölçüm ve deneme çıktıları bilgi dosyasından türeyen cevaplar taşır (not ortalaması gibi): depoya girmez.
+gelistirme/*.json
+sonuc*.json
