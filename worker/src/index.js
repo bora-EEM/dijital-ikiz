@@ -9,7 +9,7 @@
 //   4. İmzalı geçmiş: ikizin önceki cevapları sunucunun imzasıyla döner, sahte "önceki cevap" reddedilir.
 //   5. Kalıcı günlük sayaç: IP başına, oturum başına, toplam; paralı model için günlük harcama tavanı.
 // Sınav ve sağlık kontrolü X-Sinav-Anahtari ile 3 ve 4'ü atlar (anahtar yalnız Cloudflare sırrında ve Bora'da).
-import { bilgiyiAl, cevapla, mesajlariDogrula, soruyuKaydet } from "./ikiz.js";
+import { bilgiyiAl, cevapla, hazirCevap, mesajlariDogrula, soruyuKaydet, isverenCevabiniKaydet } from "./ikiz.js";
 import { sayacaSor, Sayac } from "./sayac.js";
 import { ipAnahtari, cevapImzasi, cevapImzasiDogru, oturumOlustur, oturumDogrula, turnstileDogrula, esit } from "./guvenlik.js";
 
@@ -183,9 +183,21 @@ export async function istegiIsle(istek, env, ctx) {
     return json(gelistirme ? { hata: sonuc.hata, denemeler: sonuc.denemeler } : { hata: sonuc.hata }, sonuc.durum, cors);
   }
 
-  if (sonuc.iletildi) {
-    const soru = mesajlar[mesajlar.length - 1].content;
-    const kayit = soruyuKaydet(soru, sonuc.cevap, env)
+  const sonMesaj = mesajlar[mesajlar.length - 1].content;
+  // İşverenin, ikizin sorularına cevabı (Y): ziyaretçiye "kaydettim" ancak kayıt gerçekten açıldıysa denir, bu yüzden
+  // beklenir. Düşerse dürüst cümle gider ve sayfa e-posta bağlantısını açar. Sınav isteği kayıt açmaz.
+  if (sonuc.isverenCevabi && !sinav) {
+    const k = await isverenCevabiniKaydet(sonMesaj, sonuc.sorular, env, oturum)
+      .catch((e) => ({ kaydedildi: false, neden: e.message }));
+    if (!k.kaydedildi && k.neden !== "bugün zaten kaydedildi") {
+      console.error(`cevap kaydedilemedi: ${k.neden}`);
+      sonuc.cevap = hazirCevap("Y-dustu", sonuc.dil, sonuc.eposta);
+      sonuc.iletildi = true;
+    }
+  }
+  // Bilinmeyen soru (C) bilgi deposuna kayda düşer; ziyaretçinin cevabı bunu beklemez.
+  if (sonuc.iletildi && !sonuc.isverenCevabi) {
+    const kayit = soruyuKaydet(sonMesaj, sonuc.cevap, env)
       .then((k) => {
         if (!k.kaydedildi && k.neden !== "bugün zaten kaydedildi") console.error(`soru kaydedilemedi: ${k.neden}`);
         return k;

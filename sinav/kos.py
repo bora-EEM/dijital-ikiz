@@ -95,6 +95,8 @@ def kurallar(soru: dict, sonuc: dict) -> list[str]:
         hatalar.append("bilinmeyen soru Bora'ya iletilmedi")
     if tur != "bilinmeyen" and sonuc.get("iletildi") and not soru.get("ilet_serbest"):
         hatalar.append(f"{tur} sorusu gereksiz yere iletildi")
+    if soru.get("beklenen_tur") and sonuc.get("tur") != soru["beklenen_tur"]:
+        hatalar.append(f"tür {sonuc.get('tur')}, beklenen {soru['beklenen_tur']}")
     for grup in soru.get("icermeli", []):
         if not any(p.lower() in kucuk for p in grup):
             hatalar.append(f"eksik: {' / '.join(grup)}")

@@ -8,7 +8,9 @@ export const VARSAYILAN = {
   gunlukSoru: 400,     // bütün ziyaretçiler, gün başına (normal kullanım: gün başına birkaç İK sohbeti × 10–20 soru)
   ipGunluk: 60,        // aynı IP (IPv6'da /64) gün başına
   oturumSoru: 20,      // bir oturum (bot doğrulamasından geçmiş bir sayfa açılışı)
-  gunlukKayit: 30,     // gün başına en çok bu kadar issue
+  gunlukKayit: 30,     // gün başına en çok bu kadar "cevaplanamadı" issue'su
+  gunlukIsverenCevabi: 10, // işverenin, ikizin sorularına cevabı: ayrı tavan (bu yol bilinmeyen soruların hakkını yiyemez)
+  oturumIsverenCevabi: 2,  // bir oturumdan en çok bu kadar işveren cevabı
   gunlukButceUsd: 1,   // paralı model günde en çok bu kadar; dolunca ücretsiz yuvalara düşülür (ikiz susmaz)
 };
 
@@ -23,6 +25,8 @@ export function sinirlar(env = {}) {
     ipGunluk: sayi(env.IP_GUNLUK, VARSAYILAN.ipGunluk),
     oturumSoru: sayi(env.OTURUM_SORU, VARSAYILAN.oturumSoru),
     gunlukKayit: sayi(env.GUNLUK_KAYIT, VARSAYILAN.gunlukKayit),
+    gunlukIsverenCevabi: sayi(env.GUNLUK_ISVEREN_CEVABI, VARSAYILAN.gunlukIsverenCevabi),
+    oturumIsverenCevabi: sayi(env.OTURUM_ISVEREN_CEVABI, VARSAYILAN.oturumIsverenCevabi),
     gunlukButceUsd: sayi(env.GUNLUK_BUTCE_USD, VARSAYILAN.gunlukButceUsd),
   };
 }
@@ -73,11 +77,25 @@ export async function sayacIslem(depo, env, istek) {
     }
     case "kayit": {
       if (await depo.get(`k:${istek.anahtar}`)) return { izin: false, neden: "bugün zaten kaydedildi" };
-      const n = await al("kayit");
-      if (n >= s.gunlukKayit) return { izin: false, neden: "günlük kayıt tavanı" };
-      await depo.put("kayit", n + 1);
+      const cevap = istek.tur === "cevap";
+      const sayacAdi = cevap ? "kayitY" : "kayit";
+      const n = await al(sayacAdi);
+      if (n >= (cevap ? s.gunlukIsverenCevabi : s.gunlukKayit)) return { izin: false, neden: "günlük kayıt tavanı" };
+      const oturumAdi = cevap && istek.oturum ? `y:${istek.oturum}` : null;
+      if (oturumAdi && (await al(oturumAdi)) >= s.oturumIsverenCevabi) return { izin: false, neden: "oturum kayıt tavanı" };
+      await depo.put(sayacAdi, n + 1);
+      if (oturumAdi) await depo.put(oturumAdi, (await al(oturumAdi)) + 1);
       await depo.put(`k:${istek.anahtar}`, 1);
       return { izin: true };
+    }
+    case "kayitBirak": {
+      // GitHub'a yazılamayan kayıt hakkı geri verilir: aynı metin yeniden denenebilsin, "zaten kaydedildi" yalan olmasın.
+      if (!(await depo.get(`k:${istek.anahtar}`))) return { tamam: true };
+      await depo.delete([`k:${istek.anahtar}`]);
+      const sayacAdi = istek.tur === "cevap" ? "kayitY" : "kayit";
+      await depo.put(sayacAdi, Math.max(0, (await al(sayacAdi)) - 1));
+      if (istek.tur === "cevap" && istek.oturum) await depo.put(`y:${istek.oturum}`, Math.max(0, (await al(`y:${istek.oturum}`)) - 1));
+      return { tamam: true };
     }
     case "bilgiYaz":
       if ((await depo.get("bilgi")) !== istek.metin) await depo.put("bilgi", istek.metin);
