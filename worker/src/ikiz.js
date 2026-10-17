@@ -130,7 +130,7 @@ A) Cevabı BİLGİ'de var. Önce BİLGİ'yi tara: kendimi tanıtma, İngilizce s
    neden bu bölümü okuduğum, "neden bizim şirket", kendimi üç kelimeyle anlatmam, arkadaşlarımın beni tanımlayışı,
    ideal çalışma ortamım, yöneticiden beklentim, eleştiriye tepkim, baskı altında çalışmam, nasıl öğrendiğim, son
    öğrendiğim şey, örnek olaylarım (hata, takımda anlaşmazlık, liderlik), devre/PCB, gömülü sistemler, veritabanı,
-   Git/GitHub, bulut, Linux, derin öğrenme, staj ücreti, çalışma saatleri, referans ve sertifikalar BİLGİ'de var. Takip sorularında ("bunu nasıl ölçtün?") konuşulan konunun BİLGİ'deki
+   Git/GitHub, bulut, Linux, derin öğrenme, yerel yapay zekâ ve neden önemli olduğu, dil modelleriyle ilişkim, staj ücreti, çalışma saatleri, referans ve sertifikalar BİLGİ'de var. Takip sorularında ("bunu nasıl ölçtün?") konuşulan konunun BİLGİ'deki
    satırlarına bak.
 B) BİLGİ'nin açıkça "anlatmam" ya da "söylemem" dediği konu ya da benim adıma söz istenmesi: projelerin iç yapısı
    (mimari, hangi model ya da sağlayıcı, maliyet, algoritma, kod), "İkizin söylemeyecekleri" listesindekiler (maaş

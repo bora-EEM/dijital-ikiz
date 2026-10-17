@@ -138,7 +138,9 @@ def main() -> int:
         secili = {int(n) for n in a.yalniz.split(",")}
         sorular = [s for s in sorular if s["no"] in secili]
 
-    hakem_modeli = a.hakem if a.hakem not in a.saglayici else "gemini-3.1-flash-lite"
+    # Hakem sınanan modelle aynı olmasın; karşılaştırma tam adla ("gemini-3.5-flash", "gemini-3.5-flash-lite"nin
+    # parçası diye elenip zayıf hakeme düşüyordu, 2026-10-17).
+    hakem_modeli = a.hakem if a.hakem != a.saglayici.split(":", 1)[-1] else "gemini-3.1-flash-lite"
     satirlar, uydurma, kural_hatasi, hakemsiz = [], 0, 0, 0
     for i, s in enumerate(sorular):
         if i:
