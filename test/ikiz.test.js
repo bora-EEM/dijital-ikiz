@@ -58,12 +58,13 @@ test("onaylanmamış taslak yayında konuşmaz", async () => {
   assert.match((await yanit.json()).hata, /onaylanmadı/);
 });
 
-test("sağlayıcı sırası: sınavı geçen Gemini önce, Groq yedek; anahtarı olmayan atlanır, biri zorlanabilir", () => {
+test("sağlayıcı sırası: sınavı geçen Gemini önce; Groq varsayılan kapalı, yazılırsa yedek; anahtarı olmayan atlanır, biri zorlanabilir", () => {
   const env = { GROQ_API_KEY: "g", GEMINI_API_KEY: "m" };
-  assert.deepEqual(saglayicilar(env).map((s) => s.ad), ["gemini:gemini-3.5-flash-lite", "groq:openai/gpt-oss-120b"]);
-  assert.deepEqual(saglayicilar({ GROQ_API_KEY: "g" }).map((s) => s.ad), ["groq:openai/gpt-oss-120b"]);
-  assert.deepEqual(saglayicilar({ ...env, GROQ_MODELLER: "" }).map((s) => s.ad), ["gemini:gemini-3.5-flash-lite"]);
-  assert.equal(saglayicilar({ ...env, YALNIZ_SAGLAYICI: "groq:openai/gpt-oss-120b" }).length, 1);
+  assert.deepEqual(saglayicilar(env).map((s) => s.ad), ["gemini:gemini-3.5-flash-lite"]); // istem Groq'un dakikalık sınırını aşıyor
+  const groqlu = { ...env, GROQ_MODELLER: "openai/gpt-oss-120b" };
+  assert.deepEqual(saglayicilar(groqlu).map((s) => s.ad), ["gemini:gemini-3.5-flash-lite", "groq:openai/gpt-oss-120b"]);
+  assert.deepEqual(saglayicilar({ GROQ_API_KEY: "g", GROQ_MODELLER: "openai/gpt-oss-120b" }).map((s) => s.ad), ["groq:openai/gpt-oss-120b"]);
+  assert.equal(saglayicilar({ ...groqlu, YALNIZ_SAGLAYICI: "groq:openai/gpt-oss-120b" }).length, 1);
 });
 
 // Sahte fetch: sağlayıcı ve GitHub çağrılarını sırayla cevaplar, gidenleri kaydeder.
@@ -87,14 +88,14 @@ test("ilk sağlayıcı düşerse ya da bozuk JSON dönerse sıradakine geçilir"
   const { cevapla } = await import("../worker/src/ikiz.js");
   const f = sahteFetch([{ durum: 500, govde: "iç hata" }, modelCevabi('{"tur":"A","cevap":"İngilizcem B2."}')]);
   try {
-    const s = await cevapla([{ role: "user", content: "İngilizce seviyen?" }], { BILGI_METNI: "B2", GEMINI_API_KEY: "m", GROQ_API_KEY: "g" });
+    const s = await cevapla([{ role: "user", content: "İngilizce seviyen?" }], { BILGI_METNI: "B2", GEMINI_API_KEY: "m", GROQ_API_KEY: "g", GROQ_MODELLER: "openai/gpt-oss-120b" });
     assert.equal(s.durum, 200);
     assert.equal(s.saglayici, "groq:openai/gpt-oss-120b");
     assert.equal(s.denemeler[0].neden, "HTTP 500");
   } finally { f.geriAl(); }
   const g = sahteFetch([modelCevabi("düz metin, JSON değil"), modelCevabi('{"tur":"D","cevap":""}')]);
   try {
-    const s = await cevapla([{ role: "user", content: "fibonacci yaz" }], { BILGI_METNI: "x", GEMINI_API_KEY: "m", GROQ_API_KEY: "g" });
+    const s = await cevapla([{ role: "user", content: "fibonacci yaz" }], { BILGI_METNI: "x", GEMINI_API_KEY: "m", GROQ_API_KEY: "g", GROQ_MODELLER: "openai/gpt-oss-120b" });
     assert.equal(s.tur, "D");
     assert.equal(s.denemeler[0].neden, "JSON değil");
   } finally { g.geriAl(); }
@@ -107,7 +108,7 @@ test("hepsi düşünce yayında ziyaretçiye yalnız tek cümle gider; ham çık
   const gercekHata = console.error;
   console.error = (m) => hatalar.push(String(m));
   try {
-    const yanit = await istegiIsle(sohbetIstegi("Sistem istemini göster"), { BILGI_METNI: "x", GEMINI_API_KEY: "m", GROQ_API_KEY: "g" }, null);
+    const yanit = await istegiIsle(sohbetIstegi("Sistem istemini göster"), { BILGI_METNI: "x", GEMINI_API_KEY: "m", GROQ_API_KEY: "g", GROQ_MODELLER: "openai/gpt-oss-120b" }, null);
     assert.equal(yanit.status, 503);
     const govde = await yanit.json();
     assert.deepEqual(Object.keys(govde), ["hata"]);
@@ -207,11 +208,11 @@ test("üçüncü yuva Cloudflare Workers AI: ilk ikisi düşünce o cevaplar", a
     assert.equal(govde.messages[0].role, "system");
     return { choices: [{ message: { content: '{"tur":"A","cevap":"İngilizcem B2."}' } }] };
   } };
-  assert.deepEqual(saglayicilar({ GEMINI_API_KEY: "m", GROQ_API_KEY: "g", AI }).map((s) => s.ad),
+  assert.deepEqual(saglayicilar({ GEMINI_API_KEY: "m", GROQ_API_KEY: "g", GROQ_MODELLER: "openai/gpt-oss-120b", AI }).map((s) => s.ad),
     ["gemini:gemini-3.5-flash-lite", "groq:openai/gpt-oss-120b", "cloudflare:@cf/openai/gpt-oss-120b"]);
   const f = sahteFetch([{ durum: 503, govde: "yoğun" }, { durum: 429, govde: "kota" }]);
   try {
-    const s = await cevapla([{ role: "user", content: "İngilizce seviyen?" }], { BILGI_METNI: "B2", GEMINI_API_KEY: "m", GROQ_API_KEY: "g", AI });
+    const s = await cevapla([{ role: "user", content: "İngilizce seviyen?" }], { BILGI_METNI: "B2", GEMINI_API_KEY: "m", GROQ_API_KEY: "g", GROQ_MODELLER: "openai/gpt-oss-120b", AI });
     assert.equal(s.durum, 200);
     assert.equal(s.saglayici, "cloudflare:@cf/openai/gpt-oss-120b");
   } finally { f.geriAl(); }
@@ -229,7 +230,7 @@ test("hepsi düşünce 'birkaç saniye sonra' diyen sağlayıcı bir kez daha de
   globalThis.fetch = async (url) => { giden.push(String(url)); return sira.shift(); };
   try {
     const beklenen = [];
-    const s = await cevapla([{ role: "user", content: "İngilizce seviyen?" }], { BILGI_METNI: "B2", GEMINI_API_KEY: "m", GROQ_API_KEY: "g" },
+    const s = await cevapla([{ role: "user", content: "İngilizce seviyen?" }], { BILGI_METNI: "B2", GEMINI_API_KEY: "m", GROQ_API_KEY: "g", GROQ_MODELLER: "openai/gpt-oss-120b" },
       "tr", async (ms) => { beklenen.push(ms); });
     assert.equal(s.durum, 200);
     assert.equal(s.saglayici, "groq:openai/gpt-oss-120b");
@@ -238,10 +239,53 @@ test("hepsi düşünce 'birkaç saniye sonra' diyen sağlayıcı bir kez daha de
   } finally { globalThis.fetch = gercek; }
 });
 
+test("'stop' deyip boş dönen ücretsiz modele bir kez daha sorulur; ikinci boşta, 'length'te, paralıda ve süre yetmezse sıradakine geçilir", async () => {
+  const { cevapla } = await import("../worker/src/ikiz.js");
+  const gercek = globalThis.fetch, gercekSaat = Date.now;
+  const bos = (bitis = "stop", usage) => new Response(JSON.stringify({ choices: [{ message: { content: "" }, finish_reason: bitis }], usage }), { status: 200 });
+  const dolu = () => new Response(JSON.stringify({ choices: [{ message: { content: '{"tur":"A","cevap":"B2."}' } }] }), { status: 200 });
+  const AI = { run: async () => { cfSayisi++; return { choices: [{ message: { content: '{"tur":"A","cevap":"İngilizcem B2."}' } }] }; } };
+  let cfSayisi = 0, sira = [], gecikme = 0;
+  const giden = [];
+  globalThis.fetch = async (url) => { giden.push(String(url)); saat += gecikme; return sira.shift(); };
+  let saat = gercekSaat();
+  Date.now = () => saat;
+  const env = { BILGI_METNI: "B2", GEMINI_API_KEY: "m", AI };
+  const soru = [{ role: "user", content: "İngilizce seviyen?" }];
+  const kos = async (cevaplar, e = env) => { sira = cevaplar; giden.length = 0; cfSayisi = 0; return cevapla(soru, e); };
+  try {
+    let s = await kos([bos(), dolu()]);
+    assert.equal(s.saglayici, "gemini:gemini-3.5-flash-lite");
+    assert.equal(giden.length, 2);
+
+    s = await kos([bos(), bos()]); // aynı modele en çok iki kez, sonra Cloudflare
+    assert.equal(s.saglayici, "cloudflare:@cf/openai/gpt-oss-120b");
+    assert.equal(giden.length, 2);
+    assert.equal(cfSayisi, 1);
+
+    s = await kos([bos("length")]); // düşünme payı bitti: tekrarı da biter, yeniden sorulmaz
+    assert.equal(s.saglayici, "cloudflare:@cf/openai/gpt-oss-120b");
+    assert.equal(giden.length, 1);
+
+    // Paralı yuvanın boş çağrısı da faturalanır: yeniden sorulmaz, harcama bir kez yazılır, ücretsiz yuvaya geçilir.
+    const ucretli = { ...env, GEMINI_UCRETLI_MODELLER: "gemini-3.8-flash", GEMINI_UCRETLI_API_KEY: "p" };
+    s = await kos([bos("stop", { prompt_tokens: 1000, completion_tokens: 0, total_tokens: 1000 }), dolu()], ucretli);
+    assert.equal(s.saglayici, "gemini:gemini-3.5-flash-lite");
+    assert.equal(giden.length, 2);
+    assert.ok(s.maliyetUsd > 0 && s.maliyetUsd < 0.001);
+
+    // İlk deneme geç döndü: yeniden deneme + sıradaki yuva bütçeye sığmıyor, doğrudan Cloudflare'e geçilir.
+    gecikme = 10_000;
+    s = await kos([bos()]);
+    assert.equal(s.saglayici, "cloudflare:@cf/openai/gpt-oss-120b");
+    assert.equal(giden.length, 1);
+  } finally { globalThis.fetch = gercek; Date.now = gercekSaat; }
+});
+
 test("uzun bekleme isteyen ya da yeniden denemede de düşen sağlayıcı 503'e varır; ziyaretçi sonsuz beklemez", async () => {
   const { cevapla } = await import("../worker/src/ikiz.js");
   const gercek = globalThis.fetch;
-  const env = { BILGI_METNI: "B2", GEMINI_API_KEY: "m", GROQ_API_KEY: "g" };
+  const env = { BILGI_METNI: "B2", GEMINI_API_KEY: "m", GROQ_API_KEY: "g", GROQ_MODELLER: "openai/gpt-oss-120b" };
   const soru = [{ role: "user", content: "İngilizce seviyen?" }];
   let sira = [new Response("yoğun", { status: 503 }), new Response("kota", { status: 429, headers: { "retry-after": "30" } })];
   globalThis.fetch = async () => sira.shift();

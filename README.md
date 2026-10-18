@@ -24,8 +24,8 @@ Ziyaretçi ──► GitHub Pages (docs/index.html)
                    ▼
             Cloudflare Worker (worker/)          anahtarlar burada, tarayıcıya hiç gelmez
               ├─ bilgi dosyasını gizli depodan alır (10 dk önbellek)
-              ├─ kurallı istemle ücretsiz modellere sırayla sorar:
-              │    Gemini 3.5 Flash-Lite → Groq gpt-oss-120b → Cloudflare Workers AI gpt-oss-120b
+              ├─ kurallı istemle modellere sırayla sorar (paralı yuva günlük tavanlı, anahtarı varsa):
+              │    Gemini 3.8 Flash → Gemini 3.5 Flash-Lite → Cloudflare Workers AI gpt-oss-120b
               ├─ model önce sorunun türünü seçer: bilgide var / bilinçli sınır / bilgide yok / konu dışı
               │    son ikisinde cevabı model değil sunucu yazar, uydurma imkânı kalmaz
               └─ "bilgide yok" sorusunu gizli depoya issue olarak yazar
@@ -37,8 +37,12 @@ Ziyaretçi ──► GitHub Pages (docs/index.html)
 Sağlayıcı sırası sınavla belirlendi: Gemini 3.5 Flash-Lite 25 sorunun 25'ini sıfır uydurmayla geçti; Groq bilinen
 soruları "bilmiyorum" sanmaya yatkın ve ücretsiz kotası (dakikada 8.000, günde 200.000 token) günde ~50 soruya yetiyor.
 Üçüncü yuva Cloudflare Workers AI (sunucuyla aynı yerde, anahtarsız `AI` bağlaması); 2026-10-11 sınavında 25/25, sıfır
-uydurma. Gemini yoğunken Groq'un dakikalık sınırı art arda iki soruda doluyordu, üçüncü yuva bunun için. Hepsi
-düşerse ve biri "birkaç saniye sonra" derse o bir kez daha denenir, toplam bekleme ~22 sn ile sınırlı.
+uydurma. Gemini yoğunken Groq'un dakikalık sınırı art arda iki soruda doluyordu, üçüncü yuva bunun için. Bilgi
+dosyası büyüyünce istem (~9.200 token) Groq'un dakikalık sınırını tek başına aştı; Groq 2026-10-19'dan beri kapalı
+(`GROQ_MODELLER` boş), istem küçülürse tek satırla geri açılır. Her yuva en çok 8 sn beklenir. Ücretsiz model "bitti"
+deyip boş dönerse aynı modele bir kez daha sorulur; hepsi düşerse ve biri "birkaç saniye sonra" derse o bir kez daha
+denenir. İki yeniden deneme de ancak sıradakilerle birlikte isteğin ilk ~22 sn'sine sığıyorsa yapılır; en kötü bekleme
+bilgi indirmesi (≤5 sn) artı yuva sayısı × 8 sn, üç yuvada ~29 sn (sayfa 35 sn bekler).
 Sınavı tam geçmeyen model sıraya girmez.
 
 ## Güvenlik
@@ -79,7 +83,7 @@ python sinav/kos.py --saglayici gemini:gemini-3.5-flash-lite
 
 ## Yerelde çalıştırma
 
-`worker/.dev.vars` dosyasına `GEMINI_API_KEY` ve `GROQ_API_KEY` yazın (git dışı), bilgi dosyasını `../bilgi/bilgi.md`
+`worker/.dev.vars` dosyasına `GEMINI_API_KEY` yazın (git dışı; `GROQ_API_KEY` yalnız `GROQ_MODELLER` doluysa gerekir), bilgi dosyasını `../bilgi/bilgi.md`
 yoluna koyun. Cloudflare yuvasını yerelde de denemek için ortamda `CF_HESAP` (hesap kimliği) ve `CF_AI_TOKEN` (Workers
 AI izinli erişim anahtarı) verin; verilmezse o yuva yerelde atlanır. Sonra (sunucu yalnız bu bilgisayardan erişilir):
 
@@ -96,7 +100,7 @@ npm test
 Sayfa: depo ayarlarında GitHub Pages → `main` dalı, `/docs` klasörü. Ara sunucu:
 
 ```bash
-cd worker && npx wrangler secret put GROQ_API_KEY
+cd worker && npx wrangler secret put GROQ_API_KEY   # isteğe bağlı: Groq yalnız GROQ_MODELLER doluysa sıraya girer
 ```
 
 ```bash

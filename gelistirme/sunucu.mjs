@@ -8,6 +8,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { istegiIsle } from "../worker/src/index.js";
+import { saglayicilar } from "../worker/src/ikiz.js";
 
 const KOK = dirname(dirname(fileURLToPath(import.meta.url)));
 const PORT = Number(process.env.PORT || 8787);
@@ -78,6 +79,6 @@ createServer(async (req, res) => {
   res.writeHead(200, { "Content-Type": TURLER[extname(yol)] || "application/octet-stream" });
   res.end(icerik);
 }).listen(PORT, "127.0.0.1", () => {
-  const s = ["GROQ_API_KEY", "GEMINI_API_KEY"].filter((k) => env[k]);
+  const s = saglayicilar(env).map((y) => y.ad);
   console.log(`dijital-ikiz yerel: http://localhost:${PORT}  (sağlayıcılar: ${s.join(", ") || "YOK"})`);
 });

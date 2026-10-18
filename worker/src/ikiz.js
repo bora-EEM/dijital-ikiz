@@ -18,9 +18,11 @@ const SINIR = {
 // Sıra sınava göre (sinav/, 2026-10-06): Gemini 3.5 Flash-Lite iki kez 25/25, sıfır uydurma; Groq gpt-oss-120b
 // bilinen soruları "bilgide yok" sanıyordu (güvenli yönde hata) ve ücretsiz kotası günde ~50 soruya yetiyor → yedek.
 // Sınavı tam geçmeyen model sıraya girmez (Gemini 3.1 Flash-Lite yoğunluk yüzünden yarım kaldı).
-// Biri sınıra takılırsa (429), hata verirse, susarsa ya da bozuk JSON dönerse sıradakine geçilir. Hepsi ücretsiz.
+// Biri sınıra takılırsa (429), hata verirse, susarsa ya da bozuk JSON dönerse sıradakine geçilir.
 // Üçüncü yuva Cloudflare Workers AI (ücretsiz günlük pay, anahtar yok, `AI` bağlaması): Gemini yoğunken Groq'un dakikalık
-// 8.000 token sınırı art arda iki soruda doluyordu ve ikisi birden düşüyordu (2026-10-08, Bora'nın ekranı).
+// 8.000 token sınırı art arda iki soruda doluyordu ve ikisi birden düşüyordu (2026-10-08, Bora'nın ekranı). Bilgi dosyası
+// büyüyünce tek soru bile sığmadı (istem ~9.200 token; hesabın sınır başlıklarında Groq'un bütün metin modelleri dakikada
+// en çok 8.000, 2026-10-19). Groq o günden beri varsayılan kapalı: sıra (paralı) → Gemini Flash-Lite → Cloudflare.
 // Paralı yuva (Bora'nın kararı 2026-10-13: gerçek kullanımda Gemini 3.8 Flash): anahtarı (GEMINI_UCRETLI_API_KEY)
 // yüklenince sıranın başına geçer; günlük bütçe dolunca (sayac.js) atlanır ve ücretsiz yuvalar devam eder.
 // Fiyat $/1M token (Google fiyat sayfası 2026-10-09): harcama hesabı için. 1 Ocak 2027'de iki katına çıkıyor; tarih
@@ -54,7 +56,10 @@ export function saglayicilar(env) {
     // kesildi ("length", 2026-10-11). Kullanılmayan sınır ücretlendirilmez.
     ek: { reasoning_effort: "low", max_tokens: 2000 },
   }));
-  const groq = liste(env.GROQ_MODELLER, "openai/gpt-oss-120b").map((model) => ({
+  // Groq varsayılan kapalı (Bora'nın kararı 2026-10-19): istem ~9.200 token (o200k sayımı; Gemini 9.499 sayıyor), Groq'un
+  // her metin modeli dakikada en çok 8.000 alıyor (sınır başlıkları) ve her soru 413 ile düşüyordu. İstem cevap payıyla
+  // birlikte bu sınıra inerse GROQ_MODELLER'e model adı yazılınca yedek olarak geri gelir.
+  const groq = liste(env.GROQ_MODELLER, "").map((model) => ({
     ad: `groq:${model}`,
     url: "https://api.groq.com/openai/v1/chat/completions",
     model,
@@ -249,7 +254,7 @@ async function sor(saglayici, mesajlar) {
       body: JSON.stringify(govdeKur(saglayici, mesajlar)),
     });
     if (!yanit.ok) {
-      // 429'da "kaç saniye sonra" bilgisi: Groq'un dakikalık token sınırı çoğu zaman birkaç saniyede açılır.
+      // 429'da "kaç saniye sonra" bilgisi: dakikalık token sınırı çoğu zaman birkaç saniyede açılır (Groq'ta görüldü).
       const bekleSn = yanit.status === 429 ? Number(yanit.headers.get("retry-after")) : NaN;
       return {
         tamam: false, neden: `HTTP ${yanit.status}`, ayrinti: (await yanit.text()).slice(0, 200),
@@ -259,7 +264,7 @@ async function sor(saglayici, mesajlar) {
     const veri = await yanit.json();
     const metin = veri?.choices?.[0]?.message?.content?.trim();
     const maliyetUsd = saglayici.ucretli ? maliyet(saglayici.ucretli, veri?.usage) : 0;
-    if (!metin) return { tamam: false, neden: "boş cevap", maliyetUsd };
+    if (!metin) return { tamam: false, neden: "boş cevap", bitis: veri?.choices?.[0]?.finish_reason, maliyetUsd };
     return { tamam: true, metin, maliyetUsd };
   } catch (e) {
     const zamanAsimi = e.name === "TimeoutError" || e.name === "AbortError";
@@ -422,12 +427,19 @@ export async function cevapla(mesajlar, env, sayfaDili = "tr", bekle = (ms) => n
       denemeler.push({ saglayici: s.ad, neden: c.neden, ayrinti: sonuc.metin.slice(0, 200) });
       return null;
     }
-    denemeler.push({ saglayici: s.ad, neden: sonuc.neden, ayrinti: sonuc.ayrinti, bekleSn: sonuc.bekleSn });
+    denemeler.push({ saglayici: s.ad, neden: sonuc.neden, ayrinti: sonuc.ayrinti, bekleSn: sonuc.bekleSn, bitis: sonuc.bitis });
     return null;
   };
   const sira = saglayicilar(env);
-  for (const s of sira) {
-    const sonuc = await dene(s);
+  for (const [i, s] of sira.entries()) {
+    let sonuc = await dene(s);
+    // Gemini Flash-Lite bazen "stop" deyip hiç token döndürmüyor (sınav 2026-10-19): geçici bir aksama, aynı modele bir
+    // kez daha sorulur. Yalnız "stop"ta ("length" düşünme payının bittiğidir, tekrarı da biter), yalnız ücretsiz yuvada
+    // (paralıda boş çağrı da faturalanır, sıradaki ücretsiz yuva var) ve ancak yeniden deneme ile sıradaki yuvaların hepsi
+    // bütçeye sığıyorsa: en kötü bekleme yeniden deneme yokkenkinden uzamaz.
+    const son = denemeler.at(-1);
+    if (!sonuc && !s.ucretli && son?.neden === "boş cevap" && son.bitis === "stop"
+      && Date.now() + SINIR.zamanAsimiMs * (sira.length - i) <= bitis) sonuc = await dene(s);
     if (sonuc) return sonuc;
   }
   // Hepsi düştüyse ve biri "birkaç saniye sonra" dediyse en kısa bekleyeni bir kez daha dene.

@@ -35,7 +35,8 @@ BILGI_DEPO = "bora-EEM/dijital-ikiz-bilgi"
 IZINLI_KOKENLER = "https://bora-eem.github.io"
 ILETISIM_EPOSTA = "koruyucubora@gmail.com"
 GEMINI_MODELLER = "gemini-3.5-flash-lite"
-GROQ_MODELLER = "openai/gpt-oss-120b"
+# Groq kapalı: istem dakikalık 8.000 token sınırını aşıyor (2026-10-19). Geri açmak için model adını yaz.
+GROQ_MODELLER = ""
 # Bot doğrulaması ve imza sırları yoksa sunucu açık kalmaz, cevap vermez (yanlış yapılandırma sessizce açık kapı olmasın).
 TURNSTILE_ZORUNLU = "1"
 # Günlük sınırlar (src/sayac.js varsayılanlarıyla aynı; buradan değiştirilir).
