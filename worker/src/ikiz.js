@@ -513,9 +513,9 @@ export async function cevapla(mesajlar, env, sayfaDili = "tr", bekle = (ms) => n
     return null;
   };
   const sira = saglayicilar(env);
-  // Aynı modelin paralı yuvası yalnız ücretsiz yuva kota yüzünden (HTTP 429) düştüyse denenir: zaman aşımı, 5xx ya da
-  // boş cevapta model o an yoğundur, paralı anahtarla da büyük olasılıkla düşer; 8 sn ve para boşa gider, sıradaki
-  // farklı modele geçilir (inceleme 2026-10-19).
+  // Aynı modelin paralı yuvası yalnız ücretsiz yuva kota yüzünden (HTTP 429) düştüyse denenir. 429 dışındaki her
+  // düşüşte (zaman aşımı, 5xx, boş cevap, geçersiz JSON, ağ hatası) model o an yoğun ya da aksıyordur, paralı anahtarla
+  // da büyük olasılıkla düşer; 8 sn ve para boşa gider, sıradaki farklı modele geçilir (inceleme 2026-10-19).
   const yogunModeller = new Set();
   for (const s of sira) {
     // Toplam bütçe her yuvadan önce denetlenir: üç yuva da sustuğunda 24 sn sürüyordu, bütçe 22 (açık taraması 2026-10-19).
@@ -531,8 +531,8 @@ export async function cevapla(mesajlar, env, sayfaDili = "tr", bekle = (ms) => n
     // Gemini Flash-Lite bazen "stop" deyip hiç token döndürmüyor (sınav 2026-10-19): geçici bir aksama, aynı modele bir
     // kez daha sorulur. Yalnız "stop"ta ("length" düşünme payının bittiğidir, tekrarı da biter), yalnız ücretsiz yuvada
     // (paralıda boş çağrı da faturalanır) ve ancak yeniden deneme ile bir yuva daha bütçeye sığıyorsa. Aynı modelin
-    // paralı yuvası boş cevaptan sonra atlandığı için bu deneme onun yerini alır; toplam bekleme yukarıdaki bütçe
-    // denetimiyle 22 sn'yi aşmaz.
+    // paralı yuvası boş cevaptan sonra atlandığı için bu deneme onun yerini alır. Bedeli: yeniden deneme de susarsa
+    // son yuvanın (Cloudflare) payından yer; toplam bekleme yukarıdaki bütçe denetimiyle yine 22 sn'yi aşmaz.
     const son = denemeler.at(-1);
     if (!sonuc && !s.ucretli && son?.neden === "boş cevap" && son.bitis === "stop"
       && Date.now() + SINIR.zamanAsimiMs * 2 <= bitis) sonuc = await dene(s);

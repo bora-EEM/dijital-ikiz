@@ -95,14 +95,17 @@ function balon(sinif, metin) {
   return d;
 }
 
-async function iletBaglantisi(soru) {
-  if (!EPOSTA) await adresiAl(); // ilk istek düştüyse bir kez daha
-  if (!EPOSTA) return;
+// Bağlantının yeri hemen ayrılır (cevabın hemen altı): adres sonradan gelirse sıradaki sorunun altına düşmesin.
+async function iletBaglantisi(soru, cevapBalonu) {
   const a = document.createElement("a");
   a.className = "ilet";
+  a.hidden = true;
+  cevapBalonu.after(a);
+  if (!EPOSTA) await adresiAl(); // ilk istek düştüyse bir kez daha
+  if (!EPOSTA) { a.remove(); return; }
   a.textContent = METIN[dil].ilet;
   a.href = `mailto:${EPOSTA}?subject=${encodeURIComponent(METIN[dil].iletKonu)}&body=${encodeURIComponent(soru + "\n\n")}`;
-  $("sohbet").append(a);
+  a.hidden = false;
 }
 
 // --- Bot doğrulaması: ilk soruda (ve oturum düşünce) görünmez Turnstile jetonu alınır ------------------------
@@ -208,12 +211,12 @@ async function gonder(soru) {
     if (y.durum !== 200 || !y.veri.cevap) throw new Error("hata");
     yaziyor.textContent = y.veri.cevap;
     gecmis.push({ rol: "assistant", icerik: y.veri.cevap, ...(y.veri.imza ? { imza: y.veri.imza } : {}) });
-    if (y.veri.iletildi) iletBaglantisi(soru);
+    if (y.veri.iletildi) iletBaglantisi(soru, yaziyor);
   } catch (e) {
     yaziyor.textContent = METIN[dil][e.message] || METIN[dil].hata;
     yaziyor.classList.add("hata");
     gecmis.pop(); // cevapsız soru geçmişte kalmasın
-    iletBaglantisi(soru); // ikiz cevap veremese de işveren soruyu Bora'ya iletebilsin
+    iletBaglantisi(soru, yaziyor); // ikiz cevap veremese de işveren soruyu Bora'ya iletebilsin
   } finally {
     bekliyor = false; $("gonder").disabled = false; $("soru").focus();
     $("sohbet").lastElementChild?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -229,7 +232,7 @@ $("bilgiDugme").onclick = () => {
   $("bilgiDugme").setAttribute("aria-expanded", String(acik));
 };
 function adresiAl() {
-  return fetch(ILETISIM).then((y) => (y.ok ? y.json() : null)).then((v) => {
+  return fetch(ILETISIM, { signal: AbortSignal.timeout(5000) }).then((y) => (y.ok ? y.json() : null)).then((v) => {
     if (!v || typeof v.eposta !== "string" || !v.eposta.includes("@")) return;
     EPOSTA = v.eposta;
     $("eposta").href = "mailto:" + EPOSTA;

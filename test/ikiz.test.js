@@ -473,14 +473,16 @@ test("uzun cevap kısaltılırken görüşme sonu sorularının sabit cümlesi k
 test("dört yuvalı sıra: aynı modelin paralı yuvası yalnız kota (429) düşüşünde denenir; hepsi susarsa 22 sn'yi aşmaz", async () => {
   const { cevapla } = await import("../worker/src/ikiz.js");
   const gercek = globalThis.fetch, gercekSaat = Date.now;
+  const bos = () => new Response(JSON.stringify({ choices: [{ message: { content: "" }, finish_reason: "stop" }] }), { status: 200 });
   const dolu = () => new Response(JSON.stringify({ choices: [{ message: { content: '{"tur":"A","cevap":"B2."}' } }] }), { status: 200 });
-  let saat = gercekSaat(), sira = [], cfSayisi = 0, cfSure = 0;
+  let saat = gercekSaat(), sira = [], cfSayisi = 0;
   const giden = [];
-  const AI = { run: async (_m, _g, s) => { cfSayisi++; cfSure = s; return { choices: [{ message: { content: '{"tur":"A","cevap":"B2."}' } }] }; } };
+  const AI = { run: async () => { cfSayisi++; return { choices: [{ message: { content: '{"tur":"A","cevap":"B2."}' } }] }; } };
   globalThis.fetch = async (url, istek) => {
     giden.push(JSON.parse(istek.body).model + (istek.headers.Authorization.endsWith("p") ? ":paralı" : ""));
     const c = sira.shift();
-    if (c === "sus") { saat += 8000; const e = new Error("zaman aşımı"); e.name = "TimeoutError"; throw e; }
+    if (typeof c === "number") { saat += c; const e = new Error("zaman aşımı"); e.name = "TimeoutError"; throw e; }
+    if (typeof c === "function") return c();
     return c;
   };
   Date.now = () => saat;
@@ -497,12 +499,27 @@ test("dört yuvalı sıra: aynı modelin paralı yuvası yalnız kota (429) dü�
     s = await kos([new Response("yoğun", { status: 503 }), dolu()]);
     assert.equal(s.saglayici, "gemini-ucretli:gemini-3.8-flash");
     assert.deepEqual(giden, ["gemini-3.5-flash-lite", "gemini-3.8-flash:paralı"]);
-    // Hepsi susuyor: ücretsiz 8 sn, 3.8 8 sn, Cloudflare kalan süreyle; toplam 22 sn'yi aşmaz.
-    const bas = saat;
-    s = await kos(["sus", "sus"]);
+    // İkisi 8'er sn susuyor: Cloudflare kalan süreyle cevaplar.
+    s = await kos([8000, 8000]);
     assert.equal(s.saglayici, "cloudflare:@cf/openai/gpt-oss-120b");
     assert.deepEqual(giden, ["gemini-3.5-flash-lite", "gemini-3.8-flash:paralı"]);
+    // Ağ yavaş, ikisi 11'er sn sürüyor: 22 sn bütçe dolar, Cloudflare'e geçilmez, ziyaretçi daha uzun beklemez.
+    const bas = saat;
+    s = await kos([11_000, 11_000]);
+    assert.equal(s.durum, 503);
+    assert.equal(cfSayisi, 0);
+    assert.equal(s.denemeler.at(-1).neden, "süre bütçesi doldu");
     assert.ok(saat - bas <= 22_000, `${saat - bas} ms`);
+    // Boş cevap iki kez: paralı Flash-Lite atlanır (aynı model), 3.8 cevaplar.
+    s = await kos([bos(), bos(), dolu()]);
+    assert.equal(s.saglayici, "gemini-ucretli:gemini-3.8-flash");
+    assert.deepEqual(giden, ["gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.8-flash:paralı"]);
+    // Boş cevap, yeniden denemede kota (429): şimdi aynı model paralı anahtarla denenir.
+    s = await kos([bos(), new Response("kota", { status: 429 }), dolu()]);
+    assert.equal(s.saglayici, "gemini-ucretli:gemini-3.5-flash-lite");
+    // Ücretsiz yuva geçersiz JSON döndürdü: model aksıyor, paralı Flash-Lite atlanır.
+    s = await kos([() => new Response(JSON.stringify({ choices: [{ message: { content: "düz metin" } }] }), { status: 200 }), dolu()]);
+    assert.equal(s.saglayici, "gemini-ucretli:gemini-3.8-flash");
     // Paralı yuva 'birkaç saniye sonra' dese de ikinci kez çağrılmaz.
     env.AI = undefined;
     s = await kos([new Response("kota", { status: 429 }), new Response("kota", { status: 429, headers: { "retry-after": "2" } }),

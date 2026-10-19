@@ -170,9 +170,13 @@ def main() -> int:
     if a.hakem == "yok":
         # Hakemsiz koşu "geçti" demez: kural sonucu ayrı, uydurma ölçülmedi.
         kural_gecen = sum(1 for r in satirlar if not r["kural_hatalari"])
-        print(f"\n{a.saglayici}: kural {kural_gecen}/{len(satirlar)} geçti · uydurma ölçülmedi (hakem kapalı)")
-    print(f"\n{a.saglayici}: {gecen}/{len(satirlar)} geçti · uydurma {uydurma} · hakemsiz {hakemsiz} · "
-          f"kural hatası {kural_hatasi} · hakem {hakem_modeli} · gizli kural {gizli_sayi} soruda")
+        print(f"\n{a.saglayici}: kural {kural_gecen}/{len(satirlar)} geçti · uydurma ölçülmedi (hakem kapalı) · "
+              f"gizli kural {gizli_sayi} soruda")
+        # Rapora da "0" değil "ölçülmedi" (None) yazılır: sonradan okuyan "uydurma 0" görmesin.
+        gecen, uydurma, hakem_modeli = None, None, "yok"
+    else:
+        print(f"\n{a.saglayici}: {gecen}/{len(satirlar)} geçti · uydurma {uydurma} · hakemsiz {hakemsiz} · "
+              f"kural hatası {kural_hatasi} · hakem {hakem_modeli} · gizli kural {gizli_sayi} soruda")
 
     cikti = APP / "sinav" / "sonuc"
     cikti.mkdir(exist_ok=True)
