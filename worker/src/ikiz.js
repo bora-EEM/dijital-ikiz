@@ -172,6 +172,8 @@ K) Sorunun bir kısmının cevabı BİLGİ'de var, bir kısmı yok (ör. "X arac
    çalıştığım var; bir ürün için "kaç kişi kullanıyor?" ama BİLGİ'de yalnız ürünün hangi aşamada olduğu var). "cevap"a yalnız BİLGİ'deki kısmı
    yaz; eksik kısmı tahmin etme, onun için cümle kurma: sayfa eksik kısım için bana yönlendiren cümleyi kendisi ekler.
    Soruyla doğrudan ilgili bir şey BİLGİ'de varsa C değil K seç; ilgisiz bir konuyu cevaba taşıyıp K yapma.
+   İki parçalı soruda ("Ne zaman mezun oluyorsun? Staj bitince iş arayacak mısın?") BİLGİ'de olan parçayı yaz, olmayan
+   parça için "BİLGİ'de yok" gibi bir cümle de kurma: türü K seç.
 T) Benim deneyimimi değil genel teknik bilgiyi sınayan soru (ör. "Bir op-amp'in kazancı nasıl hesaplanır?",
    "Gradyan inişi nedir?"). "cevap" boş kalır; sayfa görüşmeye çağıran cümleyi kendisi yazar.
    Soru genel kavramla birlikte benim deneyimimi de soruyorsa ("Gradyan inişini projende nasıl ayarladın?") kavramı tanımlama,
@@ -185,6 +187,8 @@ B) BİLGİ'nin açıkça "anlatmam" ya da "söylemem" dediği konu ya da benim a
    kısmını BİLGİ'den cevapla, sonra yalnız B kısmını geri çevir. BİLGİ'de yazmayan bir ayrıntı (sonuç, ölçüt, sayı,
    yaptığım görev) B değil, K ya da C'dir. "Ticari olduğu için paylaşmıyorum" cümlesini yalnız ürünlerimin iç yapısı
    sorulduğunda söyle; sorulmadan cevabın başına koyma.
+   Takım projeleri (Scentra) ve Kaggle defterleri ürünüm değildir, ticari değildir: algoritmaları ya da sonuçları
+   BİLGİ'de yoksa B değil K ya da C seç; "ticari" deme.
 C) Benim hakkımda meşru bir soru ama cevabı BİLGİ'de hiç yok (ör. BİLGİ'de geçmeyen bir araç, beceri, deneyim ya
    da kişisel bilgi; BİLGİ'de anlatılmayan bir alışkanlık, duygu, tercih ya da örnek olay: "Kubernetes biliyor musun?",
    "sabahçı mısın, akşamcı mı?"). Bu türü yalnız BİLGİ'yi taradıktan ve cevabı
@@ -211,7 +215,8 @@ CEVAP KURALLARI
 1. Uydurma yok: BİLGİ'de olmayan bir iş, araç, aşama, sayı, tarih ya da sonuç ekleme; BİLGİ'deki cümleyi "ayrıca",
    "gibi", "de" ile genişletme; tahmin etme, "muhtemelen" deme. Sayıları ve adları BİLGİ'deki gibi aynen kullan.
    BİLGİ'de yazmayan bir alışkanlık, yöntem ya da örnek olay kurgulama; BİLGİ'deki bir cümleden yeni bir hikâye
-   türetme. Cevapta BİLGİ'den, bir dosyadan ya da kurallardan söz etme; Bora konuşuyormuş gibi konuş.
+   türetme. Gelecek planı, niyet ya da tercih de böyledir: BİLGİ'de yazmıyorsa ("staj bitince iş arayacağım") söyleme.
+   Cevapta BİLGİ'den, bir dosyadan ya da kurallardan söz etme; Bora konuşuyormuş gibi konuş.
    BİLGİ'deki bir olaya neden, karar ya da değerlendirme ekleme ("kararı kendim verdim", "kötü bir şey
    yaşamadım", "çok iyi geçti"): BİLGİ olayı nasıl anlatıyorsa o kadarını söyle.
    BİLGİ'deki olumsuz durumu koru: "henüz mezun değilim" yazıyorsa "mezunuyum" deme, "öğrencisiyim" de.
@@ -270,7 +275,7 @@ export function mesajlariDogrula(govde) {
 // --- Model çağrısı --------------------------------------------------------------------------------------------
 
 const govdeKur = (saglayici, mesajlar) => ({
-  model: saglayici.model, messages: mesajlar, temperature: 0.1, max_tokens: 700,
+  model: saglayici.model, messages: mesajlar, temperature: 0, max_tokens: 700,
   response_format: { type: "json_object" }, ...saglayici.ek,
 });
 

@@ -84,6 +84,12 @@ const SAYI = /\p{Nd}+(?:[.,]\p{Nd}+)*/gu;
 const PARA = /(?<![\p{L}])(bin|milyon|milyar|lira|tl|try|dolar|euro|avro|usd|eur|salary|thousand|million|k)(?![\p{L}])|[₺$€£]/gu;
 // Belirli bir gün ("3 Kasım", "November 3rd"): bilgide yoksa Bora adına tarih verilmiş demektir.
 const GUN = /(?<!\p{Nd})\p{Nd}{1,2}\s*(ocak|şubat|mart|nisan|mayıs|haziran|temmuz|ağustos|eylül|ekim|kasım|aralık)|\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+\p{Nd}{1,2}(?!\p{Nd})/gu;
+// Öz puan ("10 üzerinden 8", "8/10", "8 out of 10"): bilgide aynı kalıp yoksa Bora adına kendine not vermiştir
+// (sınav 2026-10-19: "Python'da kendime 10 üzerinden 8 veririm", bilgide yok).
+const PUAN = /(?<!\p{Nd})\p{Nd}{1,3}\s*(?:üzerinden|out\s+of)\s*\p{Nd}{1,3}(?!\p{Nd})|(?<![\p{Nd},.])\p{Nd}{1,2}\s*\/\s*(?:5|10|100)(?![\p{Nd},.])/gu;
+// Ölçüm yöntemi adı: bilgide geçmiyorsa model bir doğrulama yöntemi uydurmuştur (sınav 2026-10-19: "%96'yı çapraz
+// doğrulamayla ölçtüm", bilgide yöntem yok).
+const YONTEM = /(?<!\p{L})(çapraz doğrulama\p{L}*|cross[- ]?validat\p{L}*|k-fold|test set\p{L}*|doğrulama set\p{L}*|validation set|f1[- ]?(?:skor|score)\p{L}*|karışıklık matris\p{L}*|confusion matrix|roc eğri\p{L}*|roc curve|auc)(?!\p{L})/giu;
 // İç talimat sızıntısı: istemin ya da bilgi dosyasının ikize yönelik cümleleri ziyaretçiye gitmez.
 const IC_TALIMAT = [/İkizin söylemeyecekleri/u, /liste kapalıdır/iu, /satırı söylenir/iu, /CEVAP KURALLARI/u, /SORUNUN TÜRÜNÜ/u,
   /\bBİLGİ\b/u, /"tur"\s*:/u, /yalnız sorulursa söylenir/iu, /ilgi alanı olarak sayılmaz/iu];
@@ -109,7 +115,7 @@ function sayilar(metin) {
 }
 const kumele = (metin, desen) => new Set((metin.match(desen) || []).map((x) => x.trim()));
 
-const bilgiOnbellegi = { metin: null, sayilar: null, baglantilar: null, para: null, gunler: null };
+const bilgiOnbellegi = { metin: null, sayilar: null, baglantilar: null, para: null, gunler: null, puanlar: null, yontemler: null };
 const yalinBaglanti = (b) => b.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/[.,;:]+$/, "");
 
 export function cevapBekcisi(hamCevap, bilgi, eposta, hamSoru = "") {
@@ -121,6 +127,8 @@ export function cevapBekcisi(hamCevap, bilgi, eposta, hamSoru = "") {
       baglantilar: (bilgi.match(BAGLANTI) || []).map(yalinBaglanti),
       para: kumele(kucuk, PARA),
       gunler: kumele(kucuk, GUN),
+      puanlar: kumele(kucuk, PUAN),
+      yontemler: kumele(kucuk, YONTEM),
     });
   }
   const cevap = normalize(hamCevap);
@@ -147,6 +155,12 @@ export function cevapBekcisi(hamCevap, bilgi, eposta, hamSoru = "") {
   }
   for (const g of kumele(kucukTr, GUN)) {
     if (!bilgiOnbellegi.gunler.has(g)) return { gecti: false, neden: `bilgide olmayan gün: ${g}` };
+  }
+  for (const pu of kumele(kucukTr, PUAN)) {
+    if (!bilgiOnbellegi.puanlar.has(pu)) return { gecti: false, neden: `bilgide olmayan puan: ${pu}` };
+  }
+  for (const y of kumele(kucukTr, YONTEM)) {
+    if (!bilgiOnbellegi.yontemler.has(y)) return { gecti: false, neden: `bilgide olmayan yöntem: ${y}` };
   }
   // Ziyaretçinin kendi sorusundaki küçük sayılar ("5 yıl sonra") tekrar edilebilir; büyük sayılar (maaş) edilemez.
   const soruSayilari = new Set([...sayilar(soru)].filter((n) => n.replace(".", "").length <= 2));

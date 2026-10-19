@@ -361,3 +361,19 @@ test("istatistik: doğrulamasız sayfa açılışı günlük tavanda durur", asy
   assert.equal(g.ziyaret, 1000);
   assert.ok([...(await depo.list()).keys()].length <= 3); // açılış başına yeni anahtar yazılmaz
 });
+
+test("bekçi: bilgide olmayan öz puan ve ölçüm yöntemi durur; bilgideki aynı kalıp geçer", () => {
+  const bilgi = "Not ortalamam 3,14 / 4,00. Modeli ayrı bir test setiyle sınadım.";
+  const e = "o@x.tr";
+  const gecer = (c) => cevapBekcisi(c, bilgi, e).gecti;
+  assert.equal(gecer("Python'da kendime 10 üzerinden 8 veririm."), false);
+  assert.equal(gecer("I'd rate myself 8 out of 10."), false);
+  assert.equal(gecer("Kendime 8/10 veririm."), false);
+  assert.equal(gecer("Doğruluğu çapraz doğrulamayla ölçtüm."), false);
+  assert.equal(gecer("I measured it with cross-validation."), false);
+  assert.equal(gecer("F1 skoruna da baktım."), false);
+  assert.equal(gecer("As I recall, precision matters in power electronics."), true);
+  assert.equal(gecer("Not ortalamam 3,14 / 4,00."), true);
+  assert.equal(gecer("Modeli ayrı bir test setiyle sınadım."), true);
+  assert.equal(gecer("Bir ürünüm yayında, çapraz bağlantılı değil."), true); // sıradan sayı ve kelime takılmaz
+});
