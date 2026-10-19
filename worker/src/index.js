@@ -81,7 +81,7 @@ export async function istegiIsle(istek, env, ctx) {
     }
     try {
       if (!env.ILETISIM_EPOSTA) throw new Error("ILETISIM_EPOSTA ayarı yok");
-      await bilgiyiAl(env);
+      await bilgiyiAl(env, { taze: true }); // GitHub'a ve anahtara gerçekten ulaşılıyor mu (yedek sayılmaz)
       await sayacaSor(env, { islem: "butce" });
       return json({ tamam: true }, 200, cors);
     } catch (e) {
@@ -185,7 +185,7 @@ export async function istegiIsle(istek, env, ctx) {
   // yuvayı zorlayabilir: canlıda her yuva ayrı sınanır (paralı yuva sıraya ancak sınavı geçince girer).
   let calismaEnv = izin.butceDoldu !== false ? { ...env, UCRETLI_KAPALI: "1" } : env;
   const zorla = sinav && istek.headers.get("X-Yalniz-Saglayici");
-  // Zorlanan yuva da bütçe tavanına uyar: bütçe doluyken zorlanan paralı yuva çağrılmaz (inceleme 2026-10-19).
+  // Zorlanan yuva da bütçe tavanına uyar: bütçe doluyken zorlanan paralı yuva çağrılmaz (açık taraması 2026-10-19).
   if (zorla) calismaEnv = { ...calismaEnv, YALNIZ_SAGLAYICI: zorla };
 
   // Ayrılan pay ile gerçek maliyetin farkı her yolda yazılır. Ödeşme isteğin ömrüne bağlı (waitUntil): ziyaretçi
@@ -225,8 +225,9 @@ export async function istegiIsle(istek, env, ctx) {
       sonuc.iletildi = true;
     }
   }
-  // Bilinmeyen soru (C) bilgi deposuna kayda düşer; ziyaretçinin cevabı bunu beklemez.
-  if (sonuc.iletildi && !sonuc.isverenCevabi) {
+  // Bilinmeyen soru (C, K) bilgi deposuna kayda düşer; ziyaretçinin cevabı bunu beklemez. Sınav isteği kayıt açmaz
+  // (canlı taramanın 20 sorusu kayda düşüp günlük kayıt hakkını yemişti, 2026-10-19).
+  if (sonuc.iletildi && !sonuc.isverenCevabi && !sinav) {
     const kayit = soruyuKaydet(sonMesaj, sonuc.cevap, env)
       .then((k) => {
         if (!k.kaydedildi && k.neden !== "bugün zaten kaydedildi") console.error(`soru kaydedilemedi: ${k.neden}`);

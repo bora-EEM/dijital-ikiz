@@ -39,7 +39,7 @@ const SORULAR = [
   "Bize sormak istediğin bir şey var mı?",
 ];
 
-const sistem = { role: "system", content: `${sistemIstemi(bilgi, "koruyucubora@gmail.com")}\n\nCEVAP DİLİ: Ziyaretçinin son mesajı Türkçe. "cevap" tamamen Türkçe olsun.` };
+const sistem = { role: "system", content: `${sistemIstemi(bilgi, "ornek@ornek.com")}\n\nCEVAP DİLİ: Ziyaretçinin son mesajı Türkçe. "cevap" tamamen Türkçe olsun.` };
 const gecmis = [];
 const satirlar = [];
 for (const soru of SORULAR) {
@@ -55,7 +55,7 @@ for (const soru of SORULAR) {
   const veri = await yanit.json();
   const u = veri.usage || {};
   const metin = veri.choices?.[0]?.message?.content || "";
-  const c = cevabiCoz(metin, "tr", "koruyucubora@gmail.com");
+  const c = cevabiCoz(metin, "tr", "ornek@ornek.com");
   const cevap = c.gecerli ? c.cevap : `(geçersiz: ${c.neden || yanit.status})`;
   gecmis.push({ role: "assistant", content: cevap });
   satirlar.push({

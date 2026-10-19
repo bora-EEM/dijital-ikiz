@@ -26,9 +26,10 @@ Ziyaretçi ──► GitHub Pages (docs/index.html)
               ├─ bilgi dosyasını gizli depodan alır (10 dk önbellek)
               ├─ kurallı istemle modellere sırayla sorar (paralı yuva günlük tavanlı, anahtarı varsa):
               │    Gemini 3.8 Flash → Gemini 3.5 Flash-Lite → Cloudflare Workers AI gpt-oss-120b
-              ├─ model önce sorunun türünü seçer: bilgide var / bilinçli sınır / bilgide yok / konu dışı
-              │    son ikisinde cevabı model değil sunucu yazar, uydurma imkânı kalmaz
-              └─ "bilgide yok" sorusunu gizli depoya issue olarak yazar
+              ├─ model önce sorunun türünü seçer: bilgide var / bilinçli sınır / kısmen bilgide /
+              │    bilgide yok / genel teknik bilgi / konu dışı (ve görüşme sonu soruları)
+              │    son üçünde cevabı model değil sunucu yazar; "kısmen"de eksik kısmın cümlesi de sunucunun
+              └─ "bilgide yok" ve "kısmen bilgide" sorusunu gizli depoya issue olarak yazar
                                │
                                ▼
               GitHub Actions: her gün sağlık kontrolü, pazartesi özet ──► bana tek bildirim ──► ben cevaplarım
