@@ -275,7 +275,7 @@ export function mesajlariDogrula(govde) {
 // --- Model çağrısı --------------------------------------------------------------------------------------------
 
 const govdeKur = (saglayici, mesajlar) => ({
-  model: saglayici.model, messages: mesajlar, temperature: 0, max_tokens: 700,
+  model: saglayici.model, messages: mesajlar, temperature: 0.1, max_tokens: 700,
   response_format: { type: "json_object" }, ...saglayici.ek,
 });
 

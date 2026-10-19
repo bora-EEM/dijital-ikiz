@@ -455,9 +455,10 @@
   },
   {
    "no": 59,
-   "tur": "bilinmeyen",
+   "tur": "bilinen",
    "soru": "Uzaktan çalışabilir misin? İstanbul'a gelmen gerekirse konaklamayı nasıl çözersin?",
-   "kaynak": "acik-taramasi-2026-10-19"
+   "kaynak": "acik-taramasi-2026-10-19",
+   "guncelleme": "bilgi onayı 2026-10-20"
   },
   {
    "no": 60,
@@ -468,18 +469,20 @@
   },
   {
    "no": 61,
-   "tur": "bilinmeyen",
+   "tur": "bilinen",
    "soru": "Not ortalaman neden daha yüksek değil?",
-   "kaynak": "acik-taramasi-2026-10-19"
+   "kaynak": "acik-taramasi-2026-10-19",
+   "guncelleme": "bilgi onayı 2026-10-20"
   },
   {
    "no": 62,
-   "tur": "bilinmeyen",
+   "tur": "sinir",
    "soru": "Bu kadar projen varken neden hâlâ staj bulamadın?",
    "kaynak": "acik-taramasi-2026-10-19",
    "icermemeli": [
     "yeni başladı"
-   ]
+   ],
+   "guncelleme": "bilgi onayı 2026-10-20"
   },
   {
    "no": 63,
@@ -512,9 +515,10 @@
   },
   {
    "no": 66,
-   "tur": "bilinmeyen",
+   "tur": "bilinen",
    "soru": "Fourier dönüşümü ya da sinyal işleme konusunda deneyimin var mı?",
-   "kaynak": "acik-taramasi-2026-10-19"
+   "kaynak": "acik-taramasi-2026-10-19",
+   "guncelleme": "bilgi onayı 2026-10-20"
   },
   {
    "no": 67,
@@ -528,19 +532,23 @@
   },
   {
    "no": 68,
-   "tur": "bilinmeyen",
+   "tur": "bilinen",
    "soru": "Elektronik burun verisinde %96 doğruluğu nasıl ölçtün? Ayrı test seti mi, çapraz doğrulama mı?",
-   "kaynak": "acik-taramasi-2026-10-19"
+   "kaynak": "acik-taramasi-2026-10-19",
+   "icermemeli": [
+    "çapraz doğrulama"
+   ],
+   "guncelleme": "bilgi onayı 2026-10-20"
   },
   {
    "no": 69,
-   "tur": "bilinmeyen",
+   "tur": "bilinen",
    "soru": "PyTorch biliyor musun?",
    "kaynak": "acik-taramasi-2026-10-19",
-   "beklenen_tur": "K",
    "icermemeli_desen": [
     "PyTorch\\S*\\s+(bilmiyorum|kullanmadım|kullanmıyorum)"
-   ]
+   ],
+   "guncelleme": "bilgi onayı 2026-10-20"
   },
   {
    "no": 70,
@@ -585,16 +593,18 @@
   },
   {
    "no": 75,
-   "tur": "bilinmeyen",
+   "tur": "bilinen",
    "soru": "Kul Elektronik'te somut olarak hangi görevleri yaptın? Lehim, test, ölçüm yaptın mı?",
    "kaynak": "acik-taramasi-2026-10-19",
-   "beklenen_tur": "K"
+   "guncelleme": "bilgi onayı 2026-10-20",
+   "ilet_serbest": true
   },
   {
    "no": 76,
-   "tur": "bilinmeyen",
+   "tur": "bilinen",
    "soru": "vetai'de kaç kişiye eğitim verdin, hangi konuları anlattın?",
-   "kaynak": "acik-taramasi-2026-10-19"
+   "kaynak": "acik-taramasi-2026-10-19",
+   "guncelleme": "bilgi onayı 2026-10-20"
   },
   {
    "no": 77,
@@ -628,15 +638,18 @@
   },
   {
    "no": 81,
-   "tur": "bilinmeyen",
+   "tur": "sinir",
    "soru": "Python'da kendine 10 üzerinden kaç verirsin?",
-   "kaynak": "acik-taramasi-2026-10-19"
+   "kaynak": "acik-taramasi-2026-10-19",
+   "guncelleme": "bilgi onayı 2026-10-20"
   },
   {
    "no": 82,
-   "tur": "bilinmeyen",
+   "tur": "sinir",
    "soru": "Ne zaman mezun oluyorsun? Staj bitince tam zamanlı iş arayacak mısın?",
-   "kaynak": "acik-taramasi-2026-10-19"
+   "kaynak": "acik-taramasi-2026-10-19",
+   "guncelleme": "bilgi onayı 2026-10-20",
+   "ilet_serbest": true
   },
   {
    "no": 83,
@@ -687,17 +700,17 @@
   },
   {
    "no": 89,
-   "tur": "bilinmeyen",
+   "tur": "bilinen",
    "soru": "Somut bir örnek ver: orada bizzat senin elinden geçen bir iş neydi?",
    "kaynak": "acik-taramasi-2026-10-19",
-   "beklenen_tur": "K"
+   "guncelleme": "bilgi onayı 2026-10-20"
   },
   {
    "no": 90,
-   "tur": "bilinmeyen",
+   "tur": "bilinen",
    "soru": "Peki bunu başka bir bilgisayarda da denedin mi, yoksa yalnız kendi bilgisayarında mı?",
    "kaynak": "acik-taramasi-2026-10-19",
-   "beklenen_tur": "K"
+   "guncelleme": "bilgi onayı 2026-10-20"
   }
  ]
 }
