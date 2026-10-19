@@ -6,6 +6,7 @@
 
 export const VARSAYILAN = {
   gunlukSoru: 400,     // bütün ziyaretçiler, gün başına (normal kullanım: gün başına birkaç İK sohbeti × 10–20 soru)
+  davetGunluk: 300,    // özgeçmişteki davet koduyla gelenlerin ayrı havuzu: anonim havuz dolsa da açık kalır
   ipGunluk: 60,        // aynı IP (IPv6'da /64) gün başına
   oturumSoru: 20,      // bir oturum (bot doğrulamasından geçmiş bir sayfa açılışı)
   gunlukKayit: 30,     // gün başına en çok bu kadar "cevaplanamadı" issue'su
@@ -22,6 +23,7 @@ const sayi = (deger, varsayilan) => {
 export function sinirlar(env = {}) {
   return {
     gunlukSoru: sayi(env.GUNLUK_SORU, VARSAYILAN.gunlukSoru),
+    davetGunluk: sayi(env.DAVET_GUNLUK, VARSAYILAN.davetGunluk),
     ipGunluk: sayi(env.IP_GUNLUK, VARSAYILAN.ipGunluk),
     oturumSoru: sayi(env.OTURUM_SORU, VARSAYILAN.oturumSoru),
     gunlukKayit: sayi(env.GUNLUK_KAYIT, VARSAYILAN.gunlukKayit),
@@ -52,26 +54,35 @@ export async function sayacIslem(depo, env, istek) {
   switch (istek.islem) {
     case "izin": {
       // Önce hepsine bak, sonra hepsini artır: reddedilen soru hiçbir sayaçtan düşmesin.
-      const genel = await al("soru");
-      if (genel >= s.gunlukSoru) return { tamam: false, kod: "genel" };
+      // Davet koduyla gelen (özgeçmişteki bağlantı) ayrı havuzdan yer: anonim havuzu dolduran onu kapatamaz.
+      const havuz = istek.davet ? "davet" : "soru";
+      const genel = await al(havuz);
+      if (genel >= (istek.davet ? s.davetGunluk : s.gunlukSoru)) return { tamam: false, kod: "genel" };
       if (!istek.sinav) {
         if ((await al(`ip:${istek.ip}`)) >= s.ipGunluk) return { tamam: false, kod: "gunluk" };
         if (istek.oturum && (await al(`o:${istek.oturum}`)) >= s.oturumSoru) return { tamam: false, kod: "oturum" };
       }
-      await depo.put("soru", genel + 1);
+      await depo.put(havuz, genel + 1);
       if (!istek.sinav) {
         await depo.put(`ip:${istek.ip}`, (await al(`ip:${istek.ip}`)) + 1);
         if (istek.oturum) await depo.put(`o:${istek.oturum}`, (await al(`o:${istek.oturum}`)) + 1);
       }
-      // Bütçe aynı turda: sayaca soru başına tek gidiş.
-      return { tamam: true, butceDoldu: (await al("usd")) >= s.gunlukButceUsd };
+      // Bütçe aynı turda: sayaca soru başına tek gidiş. Paralı yuva kullanılabilecekse en kötü maliyet önce
+      // ayrılır (rezerve), gerçek maliyet gelince fark "harca" ile düzeltilir: aynı anda gelen sorular eski toplamı
+      // görüp tavanı aşamaz (saldırı denemesi 2026-10-19). Durable Object tek iş parçacığında: ayırma atomik.
+      const usd = await al("usd");
+      const rezerve = Math.max(0, Number(istek.rezerve) || 0);
+      const butceDoldu = usd + rezerve > s.gunlukButceUsd;
+      if (!butceDoldu && rezerve) await depo.put("usd", usd + rezerve);
+      return { tamam: true, butceDoldu, rezerve: butceDoldu ? 0 : rezerve };
     }
     case "butce": {
       const usd = await al("usd");
       return { usd, doldu: usd >= s.gunlukButceUsd };
     }
     case "harca": {
-      const usd = (await al("usd")) + Math.max(0, Number(istek.usd) || 0);
+      // Fark eksi olabilir (ayrılan pay gerçek maliyetten büyükse); toplam sıfırın altına inmez.
+      const usd = Math.max(0, (await al("usd")) + (Number(istek.usd) || 0));
       await depo.put("usd", usd);
       return { usd };
     }

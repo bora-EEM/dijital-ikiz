@@ -33,7 +33,7 @@ new_sqlite_classes = ["Sayac"]
 [vars]
 BILGI_DEPO = "bora-EEM/dijital-ikiz-bilgi"
 IZINLI_KOKENLER = "https://bora-eem.github.io"
-ILETISIM_EPOSTA = "koruyucubora@gmail.com"
+# ILETISIM_EPOSTA burada değil, sunucunun gizli ayarında (açık depoda görünmesin; Bora'nın kararı 2026-10-19).
 GEMINI_MODELLER = "gemini-3.5-flash-lite"
 # Groq kapalı: istem dakikalık 8.000 token sınırını aşıyor (2026-10-19). Geri açmak için model adını yaz.
 GROQ_MODELLER = ""
@@ -44,5 +44,7 @@ GUNLUK_SORU = "400"
 IP_GUNLUK = "60"
 OTURUM_SORU = "20"
 GUNLUK_KAYIT = "30"
-GUNLUK_BUTCE_USD = "1"
-GEMINI_UCRETLI_MODELLER = "gemini-3.8-flash"
+GUNLUK_BUTCE_USD = "2"
+# Paralı yedek iki basamak (Bora'nın kararı 2026-10-19): önce aynı Flash-Lite paralı anahtarla (ücretsiz kota dolunca),
+# o da düşerse farklı model 3.8 Flash (Flash-Lite çöktüğü saatte o çalışıyordu). İkisi de sınavı geçti.
+GEMINI_UCRETLI_MODELLER = "gemini-3.5-flash-lite,gemini-3.8-flash"

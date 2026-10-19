@@ -87,7 +87,7 @@ const GUN = /(?<!\p{Nd})\p{Nd}{1,2}\s*(ocak|şubat|mart|nisan|mayıs|haziran|tem
 // İç talimat sızıntısı: istemin ya da bilgi dosyasının ikize yönelik cümleleri ziyaretçiye gitmez.
 const IC_TALIMAT = [/İkizin söylemeyecekleri/u, /liste kapalıdır/iu, /satırı söylenir/iu, /CEVAP KURALLARI/u, /SORUNUN TÜRÜNÜ/u,
   /\bBİLGİ\b/u, /"tur"\s*:/u, /yalnız sorulursa söylenir/iu, /ilgi alanı olarak sayılmaz/iu];
-const BAGLANTI = /\bhttps?:\/\/[^\s)>\]"']+|\bwww\.[^\s)>\]"']+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|dev|app|site|xyz|info|me|co|tr|ai)\b(?:\/[^\s)>\]"']*)?/gi;
+const BAGLANTI = /\bhttps?:\/\/[^\s)>\]"']+|\bwww\.[^\s)>\]"']+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|dev|app|site|xyz|info|me|co|tr|ai|ly|gg|to|sh|st|cc|gl|im|so|ws|tv|fm|biz|link|page|top|online|store|shop|tech|live|click|eu|uk|us|de|ru|cn)(?![\p{L}\p{N}])(?:\/[^\s)>\]"']*)?/giu;
 const EPOSTA = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
 const TELEFON = /(?:\+?90[\s.-]?)?\(?0?5\d{2}\)?[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}/;
 // Söz kalıpları küçük harfe indirilmiş metinde aranır (Türkçe için "tr" yereliyle: "BAŞLIYORUM" da yakalanır).

@@ -1,7 +1,18 @@
 // Ara sunucunun adresi: yerelde aynı köken, yayında Cloudflare Workers.
 const YEREL = ["localhost", "127.0.0.1"].includes(location.hostname);
 const API = YEREL ? "/api/sohbet" : "https://dijital-ikiz.koruyucubora.workers.dev/api/sohbet";
-const EPOSTA = "koruyucubora@gmail.com";
+// İletişim adresi açık depoda durmaz: sunucunun gizli ayarından gelir (Bora'nın kararı 2026-10-19). Gelene kadar
+// e-posta bağlantısı gizli kalır; gelmezse de gizli kalır, yanlış adres gösterilmez.
+const ILETISIM = API.replace(/sohbet$/, "iletisim");
+// Özgeçmişteki bağlantının davet kodu (?d=…): bu sekmede hatırlanır, her soruyla gider; ayrı günlük kota sağlar.
+const DAVET = (() => {
+  const d = new URLSearchParams(location.search).get("d");
+  try {
+    if (d) sessionStorage.setItem("davet", d);
+    return d || sessionStorage.getItem("davet") || "";
+  } catch { return d || ""; }
+})().slice(0, 64);
+let EPOSTA = "";
 const LINKEDIN = "https://www.linkedin.com/in/bora-koruyucu-558a09260/";
 // Görünmez bot doğrulaması (Cloudflare Turnstile); site anahtarı herkese açıktır. Yerelde sunucu doğrulama istemez.
 const TURNSTILE_SITE = YEREL ? "" : "0x4AAAAAAFVCNnDn_94RaIB7";
@@ -79,6 +90,7 @@ function balon(sinif, metin) {
 }
 
 function iletBaglantisi(soru) {
+  if (!EPOSTA) return;
   const a = document.createElement("a");
   a.className = "ilet";
   a.textContent = METIN[dil].ilet;
@@ -167,7 +179,7 @@ async function gonder(soru) {
   yaziyor.innerHTML = '<span class="yaziyor"><i></i><i></i><i></i></span>';
 
   try {
-    const govde = () => ({ mesajlar: gecmis.slice(-8), dil, ...(oturum ? { oturum } : {}) });
+    const govde = () => ({ mesajlar: gecmis.slice(-8), dil, ...(oturum ? { oturum } : {}), ...(DAVET ? { davet: DAVET } : {}) });
     let y;
     if (!oturum && TURNSTILE_SITE) y = await sunucuyaSor({ ...govde(), dogrulama: await dogrulamaAl() });
     else y = await sunucuyaSor(govde());
@@ -209,6 +221,11 @@ $("bilgiDugme").onclick = () => {
   $("bilgiKutu").hidden = !acik;
   $("bilgiDugme").setAttribute("aria-expanded", String(acik));
 };
-$("eposta").href = "mailto:" + EPOSTA;
+fetch(ILETISIM).then((y) => (y.ok ? y.json() : null)).then((v) => {
+  if (!v || typeof v.eposta !== "string" || !v.eposta.includes("@")) return;
+  EPOSTA = v.eposta;
+  $("eposta").href = "mailto:" + EPOSTA;
+  $("eposta").hidden = false;
+}).catch(() => {});
 if (LINKEDIN) $("linkedin").href = LINKEDIN; else $("linkedin").remove();
 diliUygula();

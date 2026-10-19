@@ -43,6 +43,9 @@ test("bekçi: bilgide olan sayı ve bağlantı geçer; maaş, telefon, izinsiz b
   assert.equal(gecer("Maaş beklentim 80.000 TL.", "80.000 TL desek?"), false); // sorudaki büyük sayı tekrar edilemez
   assert.equal(gecer("Numaram 0532 123 45 67."), false);
   assert.equal(gecer("Ayrıntı için ornek-kotu.site adresine bakın."), false);
+  assert.equal(gecer("Kısaltılmış bağlantı: bit.ly/abc123 ya da t.me/kanal"), false); // geniş alan adı listesi (2026-10-19)
+  assert.equal(gecer("Node.js ve Next.js ile çalıştım."), true); // yaygın teknoloji adları bağlantı sayılmaz
+  assert.equal(gecer("Derslerimi bitirdim.Değerlendirmeniz için teşekkürler."), true); // Türkçe harf alan adı sınırı değil
   assert.equal(gecer("Bana bora@baska.com adresinden yazın."), false);
   assert.equal(gecer("Evet, teklifinizi kabul ediyorum."), false);
   assert.equal(gecer("Confirmed, I'll start on November 3rd."), false);
@@ -99,6 +102,13 @@ test("sayaç: harcama tavanı, issue tekrar engeli ve bilgi yedeği gün değiş
   await islem({ islem: "harca", usd: 0.03 });
   await islem({ islem: "harca", usd: 0.03 });
   assert.equal((await islem({ islem: "butce" })).doldu, true);
+  // Ayırma: aynı anda gelen iki soru eski toplamı görüp tavanı aşamaz; fark (eksi de olabilir) sonra düzeltilir.
+  await depo.put("gun", "2000-01-01");
+  const ilk = await islem({ islem: "izin", ip: "a", rezerve: 0.03 });
+  const ikinci = await islem({ islem: "izin", ip: "b", rezerve: 0.03 });
+  assert.deepEqual([ilk.butceDoldu, ilk.rezerve, ikinci.butceDoldu, ikinci.rezerve], [false, 0.03, true, 0]);
+  await islem({ islem: "harca", usd: 0.01 - 0.03 }); // gerçek maliyet 0,01 çıktı
+  assert.ok(Math.abs((await islem({ islem: "butce" })).usd - 0.01) < 1e-9);
   assert.equal((await islem({ islem: "kayit", anahtar: "docker" })).izin, true);
   assert.equal((await islem({ islem: "kayit", anahtar: "docker" })).neden, "bugün zaten kaydedildi");
   assert.equal((await islem({ islem: "kayit", anahtar: "rust" })).neden, "günlük kayıt tavanı");
@@ -108,17 +118,22 @@ test("sayaç: harcama tavanı, issue tekrar engeli ve bilgi yedeği gün değiş
   assert.equal((await islem({ islem: "bilgiOku" })).metin, "B2");
 });
 
-test("paralı yuva: sınavdan sonra model yazılınca başta, bütçe dolunca atlanır; maliyet düşünme token'ını da sayar", () => {
+test("paralı yuva: sınavdan sonra model yazılınca ücretsiz Gemini'nin hemen arkasında, bütçe dolunca atlanır; maliyet düşünme token'ını da sayar", () => {
   assert.equal(saglayicilar({ GEMINI_UCRETLI_API_KEY: "u", GEMINI_API_KEY: "m" }).some((s) => s.ucretli), false); // model yazılmadı
   const env = { GEMINI_UCRETLI_API_KEY: "u", GEMINI_UCRETLI_MODELLER: "gemini-3.8-flash", GEMINI_API_KEY: "m" };
-  assert.equal(saglayicilar(env)[0].ad, "gemini-ucretli:gemini-3.8-flash");
-  assert.equal(saglayicilar({ ...env, UCRETLI_KAPALI: "1" })[0].ad, "gemini:gemini-3.5-flash-lite");
+  assert.deepEqual(saglayicilar(env).map((s) => s.ad), ["gemini:gemini-3.5-flash-lite", "gemini-ucretli:gemini-3.8-flash"]);
+  assert.deepEqual(saglayicilar({ ...env, UCRETLI_KAPALI: "1" }).map((s) => s.ad), ["gemini:gemini-3.5-flash-lite"]);
   assert.equal(saglayicilar({ GEMINI_API_KEY: "m" }).some((s) => s.ucretli), false);
   const usd = maliyet(UCRETLI_FIYAT, { prompt_tokens: 5000, completion_tokens: 80, total_tokens: 5400, prompt_tokens_details: { cached_tokens: 4000 } });
   // 1000×0,75 + 4000×0,075 + 400×3,75 = 750 + 300 + 1500 → 2550 / 1e6
   assert.ok(Math.abs(usd - 0.00255) < 1e-9);
   assert.equal(ucretliFiyat("2026-12-31").girdi, 0.75);
   assert.equal(ucretliFiyat("2027-01-01").girdi, 1.5); // Google'ın açıkladığı iki katına çıkış
+  assert.equal(ucretliFiyat("2026-12-31", "gemini-3.5-flash-lite").girdi, 0.30); // her model kendi fiyatıyla
+  assert.equal(ucretliFiyat("2026-12-31", "bilinmeyen-model").girdi, 0.75); // bilinmeyen en pahalı tabloyla
+  const iki = saglayicilar({ GEMINI_API_KEY: "m", GEMINI_UCRETLI_API_KEY: "u", GEMINI_UCRETLI_MODELLER: "gemini-3.5-flash-lite,gemini-3.8-flash" });
+  assert.deepEqual(iki.map((s) => s.ad), ["gemini:gemini-3.5-flash-lite", "gemini-ucretli:gemini-3.5-flash-lite", "gemini-ucretli:gemini-3.8-flash"]);
+  assert.deepEqual(iki.filter((s) => s.ucretli).map((s) => s.ucretli.girdi), [0.30, 0.75]);
 });
 
 // --- Kapı ---------------------------------------------------------------------------------------------------
@@ -133,7 +148,7 @@ function sahteModel(icerik = '{"tur":"A","cevap":"İngilizcem B2."}') {
   globalThis.fetch = async () => new Response(JSON.stringify({ choices: [{ message: { content: icerik } }] }), { status: 200 });
   return () => { globalThis.fetch = gercek; };
 }
-const temelEnv = () => ({ BILGI_METNI: "İngilizcem B2.", GEMINI_API_KEY: "m", IZINLI_KOKENLER: "https://bora-eem.github.io", __depo: bellekDeposu(),
+const temelEnv = () => ({ BILGI_METNI: "İngilizcem B2.", GEMINI_API_KEY: "m", IZINLI_KOKENLER: "https://bora-eem.github.io", ILETISIM_EPOSTA: "ornek@okul.edu.tr", __depo: bellekDeposu(),
   HIZ_SINIRI: { limit: async () => ({ success: true }) } }); // dakikalık sınır ayrı sınanır; testler aynı sahte IP'den
 
 test("kapı: 409'da yeni oturum jetonu da döner (oturum düşünce sayfa geçmişsiz tekrar sorabilsin)", async () => {
@@ -208,5 +223,70 @@ test("kapı: bekçiye takılan model cevabı ziyaretçiye gitmez, hazır B cevab
     assert.equal(y.status, 200);
     assert.doesNotMatch(veri.cevap, /80\.000|başlıyorum/);
     assert.match(veri.cevap, /doğrudan benimle konuşmanız/);
+  } finally { geri(); }
+});
+
+test("iletişim ucu: adres sunucunun gizli ayarından gelir, izinli kökene CORS başlığıyla döner", async () => {
+  const al = (env) => istegiIsle(new Request("http://x/api/iletisim", { headers: { Origin: "https://bora-eem.github.io" } }), env);
+  const y = await al({ ...temelEnv(), ILETISIM_EPOSTA: "ornek@okul.edu.tr" });
+  assert.equal(y.status, 200);
+  assert.equal(y.headers.get("Access-Control-Allow-Origin"), "https://bora-eem.github.io");
+  assert.deepEqual(await y.json(), { eposta: "ornek@okul.edu.tr" });
+  const sinir = await al({ ...temelEnv(), HIZ_SINIRI: { limit: async () => ({ success: false }) } });
+  assert.equal(sinir.status, 429);
+  const sessiz = console.error;
+  console.error = () => {};
+  try {
+    // Ayar yoksa eski bir adrese dönülmez: uç 503 ve adressiz, ikiz cevap vermez, sağlık ucu alarm verir.
+    const { ILETISIM_EPOSTA, ...ayarsiz } = temelEnv();
+    const yok = await al(ayarsiz);
+    assert.equal(yok.status, 503);
+    assert.doesNotMatch(await yok.text(), /@/);
+    assert.equal((await istegiIsle(istek(soruGovdesi()), ayarsiz)).status, 503);
+    assert.equal((await istegiIsle(new Request("http://x/saglik"), ayarsiz)).status, 503);
+  } finally { console.error = sessiz; }
+  const yabanci = await istegiIsle(new Request("http://x/api/iletisim", { headers: { Origin: "https://kotu.example" } }), temelEnv());
+  assert.equal(yabanci.headers.get("Access-Control-Allow-Origin"), null);
+});
+
+test("bütçe ayırma: ücretsiz yuva cevaplarsa pay geri döner, paralı cevaplarsa gerçek maliyet kalır, bütçe doluyken ayrılmaz", async () => {
+  const gercek = globalThis.fetch;
+  const cevap = (usage) => new Response(JSON.stringify({ choices: [{ message: { content: '{"tur":"A","cevap":"İngilizcem B2."}' } }], usage }), { status: 200 });
+  const env = { ...temelEnv(), GEMINI_UCRETLI_MODELLER: "gemini-3.8-flash", GEMINI_UCRETLI_API_KEY: "p", GUNLUK_BUTCE_USD: "1" };
+  const usd = async () => (await sayacIslem(env.__depo, env, { islem: "butce" })).usd;
+  const kos = async (sira, e = env) => { globalThis.fetch = async () => sira.shift(); return istegiIsle(istek(soruGovdesi()), e); };
+  try {
+    assert.equal((await kos([cevap()])).status, 200); // ücretsiz Gemini cevapladı: maliyet 0, pay geri
+    assert.ok(Math.abs(await usd()) < 1e-12);
+    // Ücretsiz yuva düştü, paralı cevapladı: sayaçta yalnız gerçek maliyet kalır (1000 girdi + 100 çıktı token).
+    assert.equal((await kos([new Response("yok", { status: 500 }), cevap({ prompt_tokens: 1000, completion_tokens: 100 })])).status, 200);
+    const beklenen = (1000 * ucretliFiyat().girdi + 100 * ucretliFiyat().cikti) / 1e6;
+    assert.ok(Math.abs((await usd()) - beklenen) < 1e-9);
+    // waitUntil'li yol da aynı yere varır.
+    const bekleyenler = [];
+    globalThis.fetch = async () => cevap();
+    await istegiIsle(istek(soruGovdesi()), env, { waitUntil: (p) => bekleyenler.push(p) });
+    await Promise.all(bekleyenler);
+    assert.ok(Math.abs((await usd()) - beklenen) < 1e-9);
+    // Bütçe doluyken pay ayrılmaz, paralı yuva kapalı kalır.
+    const dolu = { ...env, GUNLUK_BUTCE_USD: "0.000001" };
+    assert.equal((await kos([new Response("yok", { status: 500 })], dolu)).status, 503);
+    assert.ok(Math.abs((await usd()) - beklenen) < 1e-9);
+  } finally { globalThis.fetch = gercek; }
+});
+
+test("davet kodu: doğru kodla gelen ayrı havuzdan yer, anonim havuz dolsa da cevap alır; yanlış kod anonim sayılır", async () => {
+  const geri = sahteModel();
+  try {
+    const env = { ...temelEnv(), DAVET_ANAHTARI: "davet-kodu-ornek", GUNLUK_SORU: "1", DAVET_GUNLUK: "2" };
+    assert.equal((await istegiIsle(istek(soruGovdesi()), env)).status, 200); // anonim havuz: 1/1
+    assert.equal((await istegiIsle(istek(soruGovdesi()), env)).status, 429); // anonim havuz doldu
+    assert.equal((await istegiIsle(istek(soruGovdesi({ davet: "yanlis-kod-ornek" })), env)).status, 429);
+    assert.equal((await istegiIsle(istek(soruGovdesi({ davet: "davet-kodu-ornek" })), env)).status, 200);
+    assert.equal((await istegiIsle(istek(soruGovdesi({ davet: "davet-kodu-ornek" })), env)).status, 200);
+    assert.equal((await istegiIsle(istek(soruGovdesi({ davet: "davet-kodu-ornek" })), env)).status, 429); // davet havuzu da tavanlı
+    // Ayar yoksa davet alanı hiçbir şey açmaz.
+    const ayarsiz = { ...temelEnv(), GUNLUK_SORU: "0" };
+    assert.equal((await istegiIsle(istek(soruGovdesi({ davet: "" })), ayarsiz)).status, 429);
   } finally { geri(); }
 });

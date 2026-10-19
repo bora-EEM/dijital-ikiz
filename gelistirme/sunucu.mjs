@@ -24,12 +24,28 @@ function devVars() {
   return env;
 }
 
+// wrangler.toml'daki [vars]: yerel sunucu yayınla aynı ayarlarla koşsun (paralı model listesi, sınırlar). Yoksa yerel
+// sınav paralı yuvayı hiç görmüyordu, her soru bir saniyede 503 dönüyordu (2026-10-19). .dev.vars bunların üstüne yazar.
+function tomlDegiskenleri() {
+  const yol = join(KOK, "worker", "wrangler.toml");
+  if (!existsSync(yol)) return {};
+  const bolum = readFileSync(yol, "utf8").split(/^\[vars\]\s*$/m)[1]?.split(/^\[/m)[0] || "";
+  const env = {};
+  for (const satir of bolum.split(/\r?\n/)) {
+    const m = satir.match(/^\s*([A-Z_]+)\s*=\s*"(.*)"\s*$/);
+    if (m) env[m[1]] = m[2];
+  }
+  return env;
+}
+
 const env = {
+  ...tomlDegiskenleri(),
   ...devVars(),
   BILGI_METNI: readFileSync(join(KOK, "..", "bilgi", "bilgi.md"), "utf8"),
   TASLAGA_IZIN: "1",
   GELISTIRME: "1", // hata ayrıntısı ve tür/sağlayıcı yalnız yerelde döner
   IZINLI_KOKENLER: `http://localhost:${PORT}`,
+  TURNSTILE_ZORUNLU: "", // yerelde bot doğrulaması yok (site anahtarı yalnız bora-eem.github.io için)
 };
 if (process.env.KAYIT !== "1") delete env.GITHUB_TOKEN; // yerelde kayıt varsayılan kapalı
 
@@ -61,8 +77,13 @@ createServer(async (req, res) => {
       headers: req.headers,
       body: ["GET", "HEAD"].includes(req.method) ? undefined : Buffer.concat(parcalar),
     });
-    // Yalnız yerelde: sınav belirli bir sağlayıcıyı zorlayabilir (yayındaki ara sunucuda bu başlık yok sayılır).
-    const zorla = req.headers["x-yalniz-saglayici"];
+    // Yalnız yerelde ve yalnız sınav anahtarıyla: sınav belirli bir sağlayıcıyı zorlayabilir (anahtarsız biri paralı
+    // yuvayı zorlayıp bütçe yakamasın; saldırı denemesi 2026-10-19).
+    const anahtarli = env.SINAV_ANAHTARI && req.headers["x-sinav-anahtari"] === env.SINAV_ANAHTARI;
+    const zorla = anahtarli && req.headers["x-yalniz-saglayici"];
+    if (req.headers["x-yalniz-saglayici"] && !anahtarli) {
+      console.error("X-Yalniz-Saglayici anahtarsız geldi, yok sayıldı: sınav bütün sırayı koşar, sonucu o yuvaya yazma");
+    }
     const yanit = await istegiIsle(istek, zorla ? { ...env, YALNIZ_SAGLAYICI: zorla } : env, null);
     res.writeHead(yanit.status, Object.fromEntries(yanit.headers));
     res.end(Buffer.from(await yanit.arrayBuffer()));

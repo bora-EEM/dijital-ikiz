@@ -9,7 +9,7 @@
 //   4. İmzalı geçmiş: ikizin önceki cevapları sunucunun imzasıyla döner, sahte "önceki cevap" reddedilir.
 //   5. Kalıcı günlük sayaç: IP başına, oturum başına, toplam; paralı model için günlük harcama tavanı.
 // Sınav ve sağlık kontrolü X-Sinav-Anahtari ile 3 ve 4'ü atlar (anahtar yalnız Cloudflare sırrında ve Bora'da).
-import { bilgiyiAl, cevapla, hazirCevap, mesajlariDogrula, soruyuKaydet, isverenCevabiniKaydet } from "./ikiz.js";
+import { bilgiyiAl, cevapla, hazirCevap, mesajlariDogrula, soruyuKaydet, isverenCevabiniKaydet, saglayicilar } from "./ikiz.js";
 import { sayacaSor, Sayac } from "./sayac.js";
 import { ipAnahtari, cevapImzasi, cevapImzasiDogru, oturumOlustur, oturumDogrula, turnstileDogrula, esit } from "./guvenlik.js";
 
@@ -44,7 +44,7 @@ function izinliKokenler(env) {
 function corsBasliklari(istek, env) {
   const koken = istek.headers.get("Origin") || "";
   const basliklar = {
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
@@ -80,6 +80,7 @@ export async function istegiIsle(istek, env, ctx) {
       return json({ hata: SINIR_METNI.hiz, kod: "hiz" }, 429, cors);
     }
     try {
+      if (!env.ILETISIM_EPOSTA) throw new Error("ILETISIM_EPOSTA ayarı yok");
       await bilgiyiAl(env);
       await sayacaSor(env, { islem: "butce" });
       return json({ tamam: true }, 200, cors);
@@ -87,6 +88,18 @@ export async function istegiIsle(istek, env, ctx) {
       console.error(`sağlık ucu: ${e.message}`);
       return json({ tamam: false }, 503, cors);
     }
+  }
+  // Sayfanın göstereceği iletişim adresi: açık depoda durmasın diye sunucunun gizli ayarında (ILETISIM_EPOSTA,
+  // Bora'nın kararı 2026-10-19); sayfa adresi buradan alır. Ayar yoksa 503: sayfa bağlantıyı gizli tutar.
+  if (url.pathname === "/api/iletisim" && istek.method === "GET") {
+    if (await hizSiniriAsildi(`iletisim-${ipAnahtari(istek.headers.get("CF-Connecting-IP") || "yerel")}`, env)) {
+      return json({ hata: SINIR_METNI.hiz, kod: "hiz" }, 429, cors);
+    }
+    if (!env.ILETISIM_EPOSTA) {
+      console.error("ILETISIM_EPOSTA ayarı yok");
+      return json({ eposta: null }, 503, cors);
+    }
+    return json({ eposta: env.ILETISIM_EPOSTA }, 200, cors);
   }
   if (url.pathname !== "/api/sohbet") return json({ hata: "bulunamadı" }, 404, cors);
   if (istek.method !== "POST") return json({ hata: "yalnız POST" }, 405, cors);
@@ -153,7 +166,15 @@ export async function istegiIsle(istek, env, ctx) {
   // 5. Günlük sayaç. Sayaca ulaşılamazsa kapalı kalınır (sınırsız açık kalmaktansa).
   let izin;
   try {
-    izin = await sayacaSor(env, { islem: "izin", ip: ipKey, oturum, sinav });
+    // Paralı yuva sıradaysa bir sorunun en kötü maliyeti baştan ayrılır: 14.000 girdi token (istem ~9.500, Gemini
+    // sayımı 2026-10-19; en uzun geçmiş 8 mesaj ~2.800; bilgi dosyasının büyümesine pay) ve 2.000 çıktı token
+    // (paralı yuvanın max_tokens sınırı, ikiz.js). Fazlası cevap gelince geri yazılır.
+    // Bir soruda paralı yuvaların hepsi sırayla çağrılabilir (ilki boş dönerse ikincisi): ayırma toplamdır.
+    const rezerve = saglayicilar(env).filter((s) => s.ucretli)
+      .reduce((t, s) => t + (14_000 * s.ucretli.girdi + 2_000 * s.ucretli.cikti) / 1e6, 0);
+    // Davet kodu sunucunun gizli ayarında (DAVET_ANAHTARI); açık depoda değil, yalnız özgeçmişteki bağlantıda.
+    const davet = Boolean(env.DAVET_ANAHTARI) && esit(String(govde?.davet ?? ""), env.DAVET_ANAHTARI);
+    izin = await sayacaSor(env, { islem: "izin", ip: ipKey, oturum, sinav, rezerve, davet });
   } catch (e) {
     console.error(`sayaç ulaşılamadı: ${e.message}`);
     return json({ hata: GENEL_HATA }, 503, cors);
@@ -164,20 +185,29 @@ export async function istegiIsle(istek, env, ctx) {
   // yuvayı zorlayabilir: canlıda her yuva ayrı sınanır (paralı yuva sıraya ancak sınavı geçince girer).
   let calismaEnv = izin.butceDoldu !== false ? { ...env, UCRETLI_KAPALI: "1" } : env;
   const zorla = sinav && istek.headers.get("X-Yalniz-Saglayici");
-  if (zorla) calismaEnv = { ...env, YALNIZ_SAGLAYICI: zorla };
+  // Zorlanan yuva da bütçe tavanına uyar: bütçe doluyken zorlanan paralı yuva çağrılmaz (inceleme 2026-10-19).
+  if (zorla) calismaEnv = { ...calismaEnv, YALNIZ_SAGLAYICI: zorla };
 
+  // Ayrılan pay ile gerçek maliyetin farkı her yolda yazılır. Ödeşme isteğin ömrüne bağlı (waitUntil): ziyaretçi
+  // sekmeyi kapatıp bağlantıyı kopartsa da sürer, pay gün sonuna kadar kilitli kalmaz. Cevaplama hata verirse pay
+  // tutulur (faturalanmış bir çağrı olmuş olabilir; temkinli yön).
+  const harcamayiYaz = (gercek) => {
+    const fark = (gercek || 0) - (izin.rezerve || 0);
+    if (!fark) return Promise.resolve();
+    return sayacaSor(env, { islem: "harca", usd: fark }).catch((e) => console.error(`harcama yazılamadı: ${e.message}`));
+  };
+  const is = cevapla(mesajlar, calismaEnv, govde?.dil === "en" ? "en" : "tr");
+  const odesme = is.then((s) => harcamayiYaz(s.maliyetUsd), () => harcamayiYaz(izin.rezerve));
+  if (ctx?.waitUntil) ctx.waitUntil(odesme);
   let sonuc;
   try {
-    sonuc = await cevapla(mesajlar, calismaEnv, govde?.dil === "en" ? "en" : "tr");
+    sonuc = await is;
   } catch (e) {
     console.error(`cevaplanamadı: ${e.message}`);
+    if (!ctx?.waitUntil) await odesme;
     return json(gelistirme ? { hata: GENEL_HATA, ayrinti: e.message } : { hata: GENEL_HATA }, 503, cors);
   }
-  if (sonuc.maliyetUsd > 0) {
-    const harca = sayacaSor(env, { islem: "harca", usd: sonuc.maliyetUsd }).catch((e) => console.error(`harcama yazılamadı: ${e.message}`));
-    if (ctx?.waitUntil) ctx.waitUntil(harca);
-    else await harca;
-  }
+  if (!ctx?.waitUntil) await odesme;
   if (sonuc.durum !== 200) {
     console.error(`cevap yok: ${sonuc.hata} ${JSON.stringify(sonuc.denemeler)}`);
     return json(gelistirme ? { hata: sonuc.hata, denemeler: sonuc.denemeler } : { hata: sonuc.hata }, sonuc.durum, cors);

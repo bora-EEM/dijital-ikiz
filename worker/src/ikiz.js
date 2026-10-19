@@ -22,17 +22,24 @@ const SINIR = {
 // Üçüncü yuva Cloudflare Workers AI (ücretsiz günlük pay, anahtar yok, `AI` bağlaması): Gemini yoğunken Groq'un dakikalık
 // 8.000 token sınırı art arda iki soruda doluyordu ve ikisi birden düşüyordu (2026-10-08, Bora'nın ekranı). Bilgi dosyası
 // büyüyünce tek soru bile sığmadı (istem ~9.200 token; hesabın sınır başlıklarında Groq'un bütün metin modelleri dakikada
-// en çok 8.000, 2026-10-19). Groq o günden beri varsayılan kapalı: sıra (paralı) → Gemini Flash-Lite → Cloudflare.
-// Paralı yuva (Bora'nın kararı 2026-10-13: gerçek kullanımda Gemini 3.8 Flash): anahtarı (GEMINI_UCRETLI_API_KEY)
-// yüklenince sıranın başına geçer; günlük bütçe dolunca (sayac.js) atlanır ve ücretsiz yuvalar devam eder.
+// en çok 8.000, 2026-10-19). Groq o günden beri varsayılan kapalı: sıra Gemini Flash-Lite → (paralı) → Cloudflare.
+// Paralı yuva (Bora'nın kararları 2026-10-13: Gemini 3.8 Flash; 2026-10-19: yedek olarak): anahtarı
+// (GEMINI_UCRETLI_API_KEY) yüklenince ücretsiz Gemini'nin arkasına girer; günlük bütçe dolunca (sayac.js) atlanır.
 // Fiyat $/1M token (Google fiyat sayfası 2026-10-09): harcama hesabı için. 1 Ocak 2027'de iki katına çıkıyor; tarih
 // tablosu bunu bilir, tablonun bitişinden sonra fiyat doğrulanmadıysa harcama iki kat temkinle sayılır.
 export const UCRETLI_FIYATLAR = [
   { baslangic: "2026-01-01", girdi: 0.75, onbellekli: 0.075, cikti: 3.75 },
   { baslangic: "2027-01-01", girdi: 1.5, onbellekli: 0.15, cikti: 7.5 },
 ];
-export function ucretliFiyat(tarih = new Date().toISOString().slice(0, 10)) {
-  return [...UCRETLI_FIYATLAR].reverse().find((f) => tarih >= f.baslangic) || UCRETLI_FIYATLAR[0];
+// Paralı anahtarla kullanılan diğer modellerin fiyatı (Google fiyat sayfası 2026-10-16). Listede olmayan model en
+// pahalı tabloyla (3.8 Flash) sayılır: harcama eksik değil fazla görünsün.
+const MODEL_FIYATLARI = {
+  "gemini-3.8-flash": UCRETLI_FIYATLAR,
+  "gemini-3.5-flash-lite": [{ baslangic: "2026-01-01", girdi: 0.30, onbellekli: 0.03, cikti: 2.50 }],
+};
+export function ucretliFiyat(tarih = new Date().toISOString().slice(0, 10), model = "gemini-3.8-flash") {
+  const tablo = MODEL_FIYATLARI[model] || UCRETLI_FIYATLAR;
+  return [...tablo].reverse().find((f) => tarih >= f.baslangic) || tablo[0];
 }
 export const UCRETLI_FIYAT = UCRETLI_FIYATLAR[0];
 
@@ -44,7 +51,7 @@ export function saglayicilar(env) {
     url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
     model,
     anahtar: env.GEMINI_UCRETLI_API_KEY,
-    ucretli: ucretliFiyat(),
+    ucretli: ucretliFiyat(undefined, model),
     ek: { reasoning_effort: "low", max_tokens: 2000 },
   }));
   const gemini = liste(env.GEMINI_MODELLER, "gemini-3.5-flash-lite").map((model) => ({
@@ -72,7 +79,9 @@ export function saglayicilar(env) {
     ai: env.AI,
     ek: { reasoning_effort: "low" },
   })) : [];
-  const hepsi = [...ucretli, ...gemini, ...groq, ...cloudflare].filter((s) => s.anahtar || s.ai);
+  // Sıra (Bora'nın kararı 2026-10-19): ücretsiz Gemini önce; düşerse ya da boş dönerse paralı yuva, en son Cloudflare.
+  // Ziyaretçi hangi yuvanın cevap verdiğini görmez.
+  const hepsi = [...gemini, ...ucretli, ...groq, ...cloudflare].filter((s) => s.anahtar || s.ai);
   return env.YALNIZ_SAGLAYICI ? hepsi.filter((s) => s.ad === env.YALNIZ_SAGLAYICI) : hepsi;
 }
 
@@ -390,7 +399,13 @@ export async function cevapla(mesajlar, env, sayfaDili = "tr", bekle = (ms) => n
   if (!bilgiOnayliMi(bilgi) && env.TASLAGA_IZIN !== "1") {
     return { durum: 503, hata: "Bilgi dosyası henüz onaylanmadı.", denemeler: [] };
   }
-  const eposta = env.ILETISIM_EPOSTA || "koruyucubora@gmail.com";
+  // Adres sunucunun gizli ayarında (Bora'nın kararı 2026-10-19). Yoksa sessizce eski bir adrese dönülmez,
+  // ikiz cevap vermez; /saglik da aynı eksikliği bildirir.
+  const eposta = env.ILETISIM_EPOSTA;
+  if (!eposta) {
+    console.error("ILETISIM_EPOSTA ayarı yok; ikiz cevap vermiyor");
+    return { durum: 503, hata: "İletişim adresi ayarlanmadı.", denemeler: [] };
+  }
   // Not tek sistem mesajının sonuna eklenir: Gemini'nin OpenAI uyumlu ucu birden çok sistem mesajında yalnız
   // sonuncusunu tutuyor; ikinci mesaj olarak eklenince kurallar ve BİLGİ tamamen düştü (sınav 2026-10-06, 3/25).
   const dil = sohbetDili(mesajlar, sayfaDili);

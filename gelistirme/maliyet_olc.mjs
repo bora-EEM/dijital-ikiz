@@ -14,6 +14,8 @@ if (existsSync(vars)) for (const satir of readFileSync(vars, "utf8").split(/\r?\
   const m = satir.match(/^\s*([A-Z_]+)\s*=\s*"?(.*?)"?\s*$/);
   if (m) env[m[1]] = m[2];
 }
+// Paralı yuvanın model listesi wrangler.toml'da; ölçüm için ortamdan da verilebilir (GEMINI_UCRETLI_MODELLER=...).
+if (process.env.GEMINI_UCRETLI_MODELLER) env.GEMINI_UCRETLI_MODELLER = process.env.GEMINI_UCRETLI_MODELLER;
 const bilgi = readFileSync(join(KOK, "..", "bilgi", "bilgi.md"), "utf8");
 const secim = process.argv[2] || "gemini";
 const s = saglayicilar(env).find((x) => x.ad.startsWith(secim));

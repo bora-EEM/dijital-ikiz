@@ -127,7 +127,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--saglayici", required=True, help="ör. groq:openai/gpt-oss-120b")
     ap.add_argument("--bekle", type=float, default=25, help="sorular arası saniye (Groq ücretsiz kotası için ~25)")
-    ap.add_argument("--hakem", default="gemini-3.5-flash-lite")
+    ap.add_argument("--hakem", default="gemini-3.5-flash-lite",
+                    help="'yok': hakem çağrılmaz, uydurma denetimi rapordan ayrıca yapılır (Gemini kotası dolunca)")
     ap.add_argument("--sunucu", default="http://localhost:8787")
     ap.add_argument("--yalniz", default="", help="ör. 14,15 — yalnız bu numaralar")
     a = ap.parse_args()
@@ -147,7 +148,10 @@ def main() -> int:
             time.sleep(a.bekle)
         sonuc = ikize_sor(s, a.saglayici, a.sunucu)
         hatalar = kurallar(s, sonuc)
-        h = hakem(s["soru"], sonuc.get("cevap", ""), hakem_modeli) if sonuc.get("cevap") else {"uydurma": None, "neden": "cevap yok"}
+        if a.hakem == "yok":
+            h = {"uydurma": None, "neden": "hakem kapalı"}
+        else:
+            h = hakem(s["soru"], sonuc.get("cevap", ""), hakem_modeli) if sonuc.get("cevap") else {"uydurma": None, "neden": "cevap yok"}
         uydurma += h.get("uydurma") is True
         hakemsiz += h.get("uydurma") is None
         kural_hatasi += bool(hatalar)
