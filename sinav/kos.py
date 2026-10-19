@@ -111,16 +111,20 @@ def kurallar(soru: dict, sonuc: dict) -> list[str]:
 
 def gizli_kurallari_ekle(sorular: list[dict]) -> int:
     """Açık depoda durmaması gereken dizgiler (telefon, başvurulan şirketler, projelerin iç yapısı) gizli bilgi
-    deposundaki sinav-gizli.json'da; varsa soru numarasına göre birleştirilir."""
-    yol = APP.parent / "bilgi" / "sinav-gizli.json"
-    if not yol.exists():
-        print("uyarı: ../bilgi/sinav-gizli.json yok, gizli kurallar denetlenmeyecek")
+    deposundaki sinav-gizli*.json dosyalarında (sinav-gizli-acik.json: açık taramasının soruları, 2026-10-19); varsa
+    soru numarasına göre birleştirilir."""
+    yollar = sorted((APP.parent / "bilgi").glob("sinav-gizli*.json"))
+    if not yollar:
+        print("uyarı: ../bilgi/sinav-gizli*.json yok, gizli kurallar denetlenmeyecek")
         return 0
-    gizli = json.loads(yol.read_text(encoding="utf-8"))
-    for s in sorular:
-        for alan, degerler in gizli.get(str(s["no"]), {}).items():
-            s[alan] = s.get(alan, []) + degerler
-    return len(gizli)
+    sayi = 0
+    for yol in yollar:
+        gizli = json.loads(yol.read_text(encoding="utf-8"))
+        sayi += len(gizli)
+        for s in sorular:
+            for alan, degerler in gizli.get(str(s["no"]), {}).items():
+                s[alan] = s.get(alan, []) + degerler
+    return sayi
 
 
 def main() -> int:

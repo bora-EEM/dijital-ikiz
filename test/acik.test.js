@@ -109,14 +109,50 @@ test("bozuk dosya eski kopyanın yerine geçmez; sağlık ucu GitHub'a ulaşamay
     { govde: "" },                           // taze çekimde boş dosya: geçersiz, sağlık 503
     { durum: 401, govde: "Bad credentials" }, // taze çekimde anahtar bozuk: sağlık 503
   ]);
+  const gercekNow = Date.now;
+  let kayma = 0;
+  Date.now = () => gercekNow() + kayma;
   try {
     assert.equal(await bilgiyiAl(env), GECERLI_BILGI);
     const saglik = () => istegiIsle(new Request("http://x/saglik"), { ...env, ILETISIM_EPOSTA: "a@b.c" });
+    // Bir dakikadan taze GitHub kopyası varken sağlık ucu GitHub'a yeniden gitmez (herkese açık uç, GitHub sınırı).
+    assert.equal((await saglik()).status, 200);
+    assert.equal(f.giden.length, 1);
+    kayma = 61_000;
     assert.equal((await saglik()).status, 503);
     assert.equal((await saglik()).status, 503);
+    assert.equal(f.giden.length, 3);
     assert.equal(await bilgiyiAl(env), GECERLI_BILGI, "ziyaretçi yine iyi kopyayla konuşur");
     assert.ok(hatalar.some((h) => /geçersiz/.test(h)));
     assert.ok(hatalar.some((h) => /HTTP 401/.test(h)));
+  } finally { f.geriAl(); console.error = gercekHata; Date.now = gercekNow; }
+});
+
+test("görüşme sonu sorularından sonra gelen gerçek yeni soru C kalır ve iletilir", async () => {
+  const sorular = `Hangi işe katkı vermemi beklersiniz?\n\n${SORU_EKI.tr}`;
+  const f = sahteFetch([modelCevabi('{"tur":"C","cevap":""}')]);
+  try {
+    const s = await cevapla([
+      { role: "user", content: "Bize sormak istediğin bir şey var mı?" },
+      { role: "assistant", content: sorular },
+      { role: "user", content: "Docker biliyor musun?" },
+    ], { BILGI_METNI: "x", GEMINI_API_KEY: "m", ILETISIM_EPOSTA: "a@b.c" });
+    assert.equal(s.tur, "C");
+    assert.equal(s.iletildi, true);
+    assert.equal(s.isverenCevabi, undefined);
+  } finally { f.geriAl(); }
+});
+
+test("bekçi K cevabını durdurursa bilinmeyen kısım yine kayda düşer (C)", async () => {
+  const f = sahteFetch([modelCevabi('{"tur":"K","cevap":"PyTorch\'u 2 yıl kullandım."}')]);
+  const gercekHata = console.error;
+  console.error = () => {};
+  try {
+    const s = await cevapla([{ role: "user", content: "PyTorch biliyor musun?" }], { BILGI_METNI: "Keras ve TensorFlow", GEMINI_API_KEY: "m", ILETISIM_EPOSTA: "a@b.c" });
+    assert.ok(s.bekci, "bekçi durdurmalı");
+    assert.equal(s.tur, "C");
+    assert.equal(s.iletildi, true);
+    assert.equal(s.cevap, hazirCevap("C", "tr", "a@b.c"));
   } finally { f.geriAl(); console.error = gercekHata; }
 });
 
