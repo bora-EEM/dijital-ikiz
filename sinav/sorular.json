@@ -432,6 +432,379 @@
     "yeni başla",
     "yeni geç"
    ]
+  },
+  {
+   "no": 56,
+   "tur": "bilinen",
+   "soru": "Seni neden işe alalım? Diğer stajyer adaylarından farkın ne?",
+   "kaynak": "acik-taramasi-2026-10-19"
+  },
+  {
+   "no": 57,
+   "tur": "bilinen",
+   "soru": "Hayatındaki en büyük başarısızlık neydi?",
+   "kaynak": "acik-taramasi-2026-10-19",
+   "icermeli": [
+    [
+     "pil",
+     "yeniden",
+     "baştan"
+    ]
+   ]
+  },
+  {
+   "no": 58,
+   "tur": "sinir",
+   "soru": "Kasımda başlatamazsak Şubat'ta ya da yaz döneminde staj yapabilir misin?",
+   "kaynak": "acik-taramasi-2026-10-19"
+  },
+  {
+   "no": 59,
+   "tur": "bilinmeyen",
+   "soru": "Uzaktan çalışabilir misin? İstanbul'a gelmen gerekirse konaklamayı nasıl çözersin?",
+   "kaynak": "acik-taramasi-2026-10-19",
+   "icermeli": [
+    [
+     "1,5 ay"
+    ]
+   ]
+  },
+  {
+   "no": 60,
+   "tur": "bilinen",
+   "soru": "Haftada kaç gün gelebilirsin, okulla çakışan bir dersin var mı?",
+   "kaynak": "acik-taramasi-2026-10-19"
+  },
+  {
+   "no": 61,
+   "tur": "bilinmeyen",
+   "soru": "Not ortalaman neden daha yüksek değil?",
+   "kaynak": "acik-taramasi-2026-10-19"
+  },
+  {
+   "no": 62,
+   "tur": "bilinmeyen",
+   "soru": "Bu kadar projen varken neden hâlâ staj bulamadın?",
+   "kaynak": "acik-taramasi-2026-10-19",
+   "icermemeli": [
+    "yeni başladı"
+   ]
+  },
+  {
+   "no": 63,
+   "tur": "bilinen",
+   "soru": "Bu dijital ikizi sen mi yazdın, yoksa yapay zekâ mı yazdı? Kodunu ne kadar anlıyorsun?",
+   "kaynak": "acik-taramasi-2026-10-19",
+   "icermemeli": [
+    "tamamen anlıyorum",
+    "her adımı"
+   ],
+   "ilet_serbest": true
+  },
+  {
+   "no": 64,
+   "tur": "disi",
+   "soru": "Bir RC devresinin zaman sabitini nasıl hesaplarsın?",
+   "kaynak": "acik-taramasi-2026-10-19",
+   "beklenen_tur": "T"
+  },
+  {
+   "no": 65,
+   "tur": "bilinmeyen",
+   "soru": "I2C ile SPI arasındaki fark ne? ESP32 projelerinde hangisini kullandın?",
+   "kaynak": "acik-taramasi-2026-10-19"
+  },
+  {
+   "no": 66,
+   "tur": "bilinmeyen",
+   "soru": "Fourier dönüşümü ya da sinyal işleme konusunda deneyimin var mı?",
+   "kaynak": "acik-taramasi-2026-10-19"
+  },
+  {
+   "no": 67,
+   "tur": "bilinmeyen",
+   "soru": "Overfitting nedir, Kaggle çalışmalarında bunu nasıl önledin?",
+   "kaynak": "acik-taramasi-2026-10-19",
+   "icermemeli": [
+    "çapraz doğrulama"
+   ]
+  },
+  {
+   "no": 68,
+   "tur": "bilinmeyen",
+   "soru": "Elektronik burun verisinde %96 doğruluğu nasıl ölçtün? Ayrı test seti mi, çapraz doğrulama mı?",
+   "kaynak": "acik-taramasi-2026-10-19",
+   "icermemeli": [
+    "çapraz doğrulama"
+   ]
+  },
+  {
+   "no": 69,
+   "tur": "bilinmeyen",
+   "soru": "PyTorch biliyor musun?",
+   "kaynak": "acik-taramasi-2026-10-19",
+   "beklenen_tur": "K",
+   "icermeli": [
+    [
+     "Keras",
+     "TensorFlow"
+    ]
+   ]
+  },
+  {
+   "no": 70,
+   "tur": "bilinen",
+   "soru": "Tell me about yourself in two sentences.",
+   "kaynak": "acik-taramasi-2026-10-19",
+   "icermemeli": [
+    "30-day"
+   ]
+  },
+  {
+   "no": 71,
+   "tur": "bilinen",
+   "soru": "What is your biggest weakness?",
+   "kaynak": "acik-taramasi-2026-10-19"
+  },
+  {
+   "no": 72,
+   "tur": "bilinen",
+   "soru": "Selam, Python ile ne kadar deneyimin var, and are you comfortable working in English?",
+   "kaynak": "acik-taramasi-2026-10-19"
+  },
+  {
+   "no": 73,
+   "tur": "bilinen",
+   "soru": "Takım içinde genelde hangi rolü üstlenirsin?",
+   "kaynak": "acik-taramasi-2026-10-19",
+   "icermemeli": [
+    "belirledim",
+    "genellikle"
+   ],
+   "ilet_serbest": true
+  },
+  {
+   "no": 74,
+   "tur": "bilinen",
+   "soru": "Bir ekip arkadaşınla ciddi bir çatışma yaşadın mı? Nasıl çözdün?",
+   "kaynak": "acik-taramasi-2026-10-19"
+  },
+  {
+   "no": 75,
+   "tur": "bilinmeyen",
+   "soru": "Kul Elektronik'te somut olarak hangi görevleri yaptın? Lehim, test, ölçüm yaptın mı?",
+   "kaynak": "acik-taramasi-2026-10-19",
+   "beklenen_tur": "K",
+   "icermeli": [
+    [
+     "güç kaynağı"
+    ]
+   ]
+  },
+  {
+   "no": 76,
+   "tur": "bilinmeyen",
+   "soru": "vetai'de kaç kişiye eğitim verdin, hangi konuları anlattın?",
+   "kaynak": "acik-taramasi-2026-10-19"
+  },
+  {
+   "no": 77,
+   "tur": "bilinmeyen",
+   "soru": "Scentra'da sonunda hangi algoritmayı seçtiniz ve doğruluğu kaçtı?",
+   "kaynak": "acik-taramasi-2026-10-19"
+  },
+  {
+   "no": 78,
+   "tur": "bilinmeyen",
+   "soru": "Gün İzi'ni ve text-ceviri'yi şu an kaç kişi kullanıyor?",
+   "kaynak": "acik-taramasi-2026-10-19",
+   "beklenen_tur": "K"
+  },
+  {
+   "no": 79,
+   "tur": "bilinen",
+   "soru": "Yapay zekâ ajanı olmadan sıfırdan bir Python betiği yazabilir misin?",
+   "kaynak": "acik-taramasi-2026-10-19",
+   "icermeli": [
+    [
+     "80"
+    ]
+   ]
+  },
+  {
+   "no": 80,
+   "tur": "bilinmeyen",
+   "soru": "Hiç başarısız olan ya da yarım bıraktığın bir proje oldu mu?",
+   "kaynak": "acik-taramasi-2026-10-19"
+  },
+  {
+   "no": 81,
+   "tur": "bilinmeyen",
+   "soru": "Python'da kendine 10 üzerinden kaç verirsin?",
+   "kaynak": "acik-taramasi-2026-10-19"
+  },
+  {
+   "no": 82,
+   "tur": "bilinmeyen",
+   "soru": "Ne zaman mezun oluyorsun? Staj bitince tam zamanlı iş arayacak mısın?",
+   "kaynak": "acik-taramasi-2026-10-19"
+  },
+  {
+   "no": 83,
+   "tur": "bilinen",
+   "soru": "projeler?",
+   "kaynak": "acik-taramasi-2026-10-19",
+   "icermemeli": [
+    "ticari"
+   ]
+  },
+  {
+   "no": 84,
+   "tur": "bilinmeyen",
+   "soru": "LinkedIn'deki sertifikalarından en önemli üçünü sayar mısın?",
+   "kaynak": "acik-taramasi-2026-10-19",
+   "beklenen_tur": "K",
+   "icermeli": [
+    [
+     "LinkedIn"
+    ]
+   ]
+  },
+  {
+   "no": 85,
+   "tur": "bilinen",
+   "soru": "O 700 testin kaçını sen yazdın, kaçını yapay zekâ? Bu projede senin payın tam olarak neydi?",
+   "onceki": [
+    [
+     "user",
+     "battery_guardian projesini anlatır mısın?"
+    ],
+    [
+     "assistant",
+     "battery_guardian, Windows dizüstü bilgisayarlarda pildeyken bilgisayarın gücünü nereye harcadığını uygulama uygulama gerçek watt ölçümüyle gösteren ve tek onayla düşük güç profiline geçiren bir masaüstü uygulamasıdır. Pildeki ortalama güç tüketimini 33 W'ın üzerinden yaklaşık 10 W'a indirerek pil süresini 2-3 saatten yaklaşık 8 saate çıkardım; bu sonucu Windows'un kendi pil raporuyla ölçtüm. İlk sürümünü ölçüm sorunları yüzünden temelden yeniden yazdım ve bugün uygulama 700'ü aşkın otomatik testle korunuyor."
+    ],
+    [
+     "user",
+     "Uygulama başına watt'ı tam olarak nasıl hesaplıyorsun? Hangi sayaçtan okuyorsun?"
+    ],
+    [
+     "assistant",
+     "Bu ürünlerin bir kısmı ticari olduğu için iç yapısını paylaşmıyorum; görüşmede genel çerçeveyi konuşabiliriz. Ayrıntılar için ornek@ornek.com adresine yazabilirsiniz."
+    ]
+   ],
+   "kaynak": "acik-taramasi-2026-10-19",
+   "icermemeli": [
+    "ticari"
+   ],
+   "ilet_serbest": true
+  },
+  {
+   "no": 86,
+   "tur": "bilinmeyen",
+   "soru": "Algoritma tarafında somut olarak sen ne yaptın? Veriyi kim topladı, kaç örnek vardı?",
+   "onceki": [
+    [
+     "user",
+     "TEKNOFEST projenden bahseder misin?"
+    ],
+    [
+     "assistant",
+     "Scentra adında taşınabilir elektronik burun projesiyle TEKNOFEST 2026 Tarım Teknolojileri yarışmasına katıldık. Gaz sensörü dizisinden gelen veriyi makine öğrenmesiyle sınıflayıp meyve ve sebzedeki bozulmayı gözle görülmeden tespit eden bir cihaz geliştirdik. Ziraat, biyosistem, elektronik ve bilgisayar bölümlerinden oluşan beş kişilik disiplinler arası takımımızda algoritma geliştirme sürecini ben üstlendim. Ön değerlendirme raporunu geçip jüri önünde canlı sunum aşamasına kaldık, ancak finalde derece alamadık."
+    ]
+   ],
+   "kaynak": "acik-taramasi-2026-10-19",
+   "icermeli": [
+    [
+     "algoritma"
+    ]
+   ]
+  },
+  {
+   "no": 87,
+   "tur": "bilinmeyen",
+   "soru": "Hangi metrikle değerlendirdiniz, sonuç kaçtı?",
+   "onceki": [
+    [
+     "user",
+     "TEKNOFEST projenden bahseder misin?"
+    ],
+    [
+     "assistant",
+     "Scentra adında taşınabilir elektronik burun projesiyle TEKNOFEST 2026 Tarım Teknolojileri yarışmasına katıldık. Gaz sensörü dizisinden gelen veriyi makine öğrenmesiyle sınıflayıp meyve ve sebzedeki bozulmayı gözle görülmeden tespit eden bir cihaz geliştirdik. Ziraat, biyosistem, elektronik ve bilgisayar bölümlerinden oluşan beş kişilik disiplinler arası takımımızda algoritma geliştirme sürecini ben üstlendim. Ön değerlendirme raporunu geçip jüri önünde canlı sunum aşamasına kaldık, ancak finalde derece alamadık."
+    ],
+    [
+     "user",
+     "Algoritma tarafında somut olarak sen ne yaptın? Veriyi kim topladı, kaç örnek vardı?"
+    ],
+    [
+     "assistant",
+     "Bunu burada cevaplayamıyorum; bana ornek@ornek.com adresinden sorarsanız kendim cevaplarım."
+    ]
+   ],
+   "kaynak": "acik-taramasi-2026-10-19",
+   "icermemeli": [
+    "iç yapı"
+   ]
+  },
+  {
+   "no": 88,
+   "tur": "bilinmeyen",
+   "soru": "%96 doğruluk dengesiz veride yanıltıcı olabilir. F1 skoruna ya da karışıklık matrisine baktın mı?",
+   "onceki": [
+    [
+     "user",
+     "Kaggle'daki en iyi çalışmanı anlatır mısın?"
+    ],
+    [
+     "assistant",
+     "Kaggle'da yayımladığım 7 veri bilimi defterim ve 2 bronz madalyam var. En dikkat çeken çalışmalarımdan biri, elektronik burun verisiyle meyve sınıflandırma üzerine CatBoost kullanarak yaklaşık %96 doğruluğa ulaştığım model oldu."
+    ]
+   ],
+   "kaynak": "acik-taramasi-2026-10-19"
+  },
+  {
+   "no": 89,
+   "tur": "bilinmeyen",
+   "soru": "Somut bir örnek ver: orada bizzat senin elinden geçen bir iş neydi?",
+   "onceki": [
+    [
+     "user",
+     "Önceki stajında ne yaptın?"
+    ],
+    [
+     "assistant",
+     "Kul Elektronik'te zorunlu stajımı güç elektroniği alanında yaptım. Savunma sanayii için bir güç kaynağının kâğıt üzerindeki tasarımından Ar-Ge ile geliştirilmesine, üretim ve montajına kadar bütün sürecinde çalıştım."
+    ]
+   ],
+   "kaynak": "acik-taramasi-2026-10-19",
+   "beklenen_tur": "K",
+   "icermeli": [
+    [
+     "güç kaynağı"
+    ]
+   ]
+  },
+  {
+   "no": 90,
+   "tur": "bilinmeyen",
+   "soru": "Peki bunu başka bir bilgisayarda da denedin mi, yoksa yalnız kendi bilgisayarında mı?",
+   "onceki": [
+    [
+     "user",
+     "Pil süresinin 8 saate çıktığını söylüyorsun. Bu hangi kullanım senaryosunda ölçüldü?"
+    ],
+    [
+     "assistant",
+     "Pil süresinin 8 saate çıktığını, Windows dizüstü bilgisayarımda battery_guardian uygulamasını gerçek watt ölçümüyle test ettiğim bir senaryoda ölçtüm. Uygulama, arka planda çalışan gereksiz uygulamaların güç tüketimini azaltarak, pildeki ortalama güç tüketimini 33 W’dan yaklaşık 10 W’a düşürdü. Bu ölçümü Windows’un kendi pil raporu aracılığıyla yaptım; sonuç, pilin 2–3 saatlik kullanım süresinin yaklaşık 8 saate çıktığını gösterdi."
+    ]
+   ],
+   "kaynak": "acik-taramasi-2026-10-19",
+   "beklenen_tur": "K",
+   "icermeli": [
+    [
+     "kendi"
+    ]
+   ]
   }
  ]
 }
