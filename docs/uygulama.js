@@ -32,7 +32,7 @@ const METIN = {
     yer: "Bir soru yazın…",
     oneriler: ["Hangi projeleri yaptın?", "Ne zaman ve nerede staj yapabilirsin?", "Yapay zekâyı işinde nasıl kullanıyorsun?"],
     bilgiDugme: "Neler kaydedilir ⓘ",
-    bilgi: "Bu bir yapay zekâ. Cevaplar yalnız Bora'nın onayladığı bilgilerden gelir; bilmediği bir şey sorulursa uydurmaz, sizi Bora'ya yönlendirir. Cevaplayamadığı sorular ikizi geliştirmek için, ikizin size sorduğu sorulara verdiğiniz cevaplar da Bora okusun diye isimsiz kaydedilir (ad ya da sohbetin geri kalanı tutulmaz). Kötüye kullanımı önlemek ve günlük ziyaretçi sayısını bulmak için IP adresiniz yalnız günlük sayaçta bir gün tutulur; sayfa açılışı ve soru sayıları isimsiz toplam olarak saklanır. Cloudflare görünmez bir bot doğrulaması yapar. Sorular cevap üretmek için yapay zekâ sağlayıcılarına (Google, Cloudflare) gönderilir; Google'ın ücretsiz katmanında hizmetin geliştirilmesinde kullanılabilir. Kişisel bilgi yazmayın.",
+    bilgi: "Bu bir yapay zekâ. Cevaplar yalnız Bora'nın onayladığı bilgilerden gelir; bilmediği bir şey sorulursa uydurmaz, sizi Bora'ya yönlendirir. Cevaplayamadığı sorular ikizi geliştirmek için, ikizin size sorduğu sorulara verdiğiniz cevaplar da Bora okusun diye isimsiz kaydedilir (ad ya da sohbetin geri kalanı tutulmaz). Kötüye kullanımı önlemek için IP adresiniz yalnız günlük soru sayacında tutulur ve en geç ertesi gün silinir; sayfa açılışı ve soru sayıları isimsiz toplam olarak 180 gün saklanır. Cloudflare görünmez bir bot doğrulaması yapar. Sorular cevap üretmek için yapay zekâ sağlayıcılarına (Google, Cloudflare) gönderilir; Google'ın ücretsiz katmanında hizmetin geliştirilmesinde kullanılabilir. Kişisel bilgi yazmayın.",
     eposta: "E-posta",
     ilet: "Bora'ya e-postayla sor",
     iletKonu: "Dijital ikizinden bir soru",
@@ -49,7 +49,7 @@ const METIN = {
     yer: "Type a question…",
     oneriler: ["What projects have you built?", "When and where can you do your internship?", "How do you use AI in your work?"],
     bilgiDugme: "What gets saved ⓘ",
-    bilgi: "This is an AI. Answers come only from information Bora has approved; if it doesn't know something, it won't make it up and will point you to Bora. Questions it can't answer are logged anonymously to improve the twin, and your answers to the twin's own questions are saved anonymously for Bora to read (no name or rest of the chat is kept). To prevent abuse and count daily visitors, your IP address is kept for one day in a daily counter only; page views and question counts are stored as anonymous totals. Cloudflare runs an invisible bot check. Questions are sent to AI providers (Google, Cloudflare) to generate answers; on Google's free tier they may be used to improve its services. Please don't include personal information.",
+    bilgi: "This is an AI. Answers come only from information Bora has approved; if it doesn't know something, it won't make it up and will point you to Bora. Questions it can't answer are logged anonymously to improve the twin, and your answers to the twin's own questions are saved anonymously for Bora to read (no name or rest of the chat is kept). To prevent abuse, your IP address is kept only in a daily question counter and deleted by the next day at the latest; page views and question counts are stored as anonymous totals for 180 days. Cloudflare runs an invisible bot check. Questions are sent to AI providers (Google, Cloudflare) to generate answers; on Google's free tier they may be used to improve its services. Please don't include personal information.",
     eposta: "Email",
     ilet: "Ask Bora by email",
     iletKonu: "A question from your digital twin",
@@ -101,7 +101,7 @@ async function iletBaglantisi(soru, cevapBalonu) {
   a.className = "ilet";
   a.hidden = true;
   cevapBalonu.after(a);
-  if (!EPOSTA) await adresiAl(); // ilk istek düştüyse bir kez daha
+  if (!EPOSTA) await adresiAl(true); // ilk istek düştüyse bir kez daha (sayılmaz)
   if (!EPOSTA) { a.remove(); return; }
   a.textContent = METIN[dil].ilet;
   a.href = `mailto:${EPOSTA}?subject=${encodeURIComponent(METIN[dil].iletKonu)}&body=${encodeURIComponent(soru + "\n\n")}`;
@@ -231,9 +231,10 @@ $("bilgiDugme").onclick = () => {
   $("bilgiKutu").hidden = !acik;
   $("bilgiDugme").setAttribute("aria-expanded", String(acik));
 };
-function adresiAl() {
-  // Davet kodu başlıkta gider (adreste değil): özgeçmişten gelen ziyaret ayrı sayılır.
-  return fetch(ILETISIM, { signal: AbortSignal.timeout(5000), headers: DAVET ? { "X-Davet": DAVET } : {} }).then((y) => (y.ok ? y.json() : null)).then((v) => {
+function adresiAl(tekrar = false) {
+  // Davet kodu başlıkta gider (adreste değil): özgeçmişten gelen açılış ayrı sayılır.
+  const basliklar = { ...(DAVET ? { "X-Davet": DAVET } : {}), ...(tekrar ? { "X-Tekrar": "1" } : {}) };
+  return fetch(ILETISIM, { signal: AbortSignal.timeout(5000), headers: basliklar }).then((y) => (y.ok ? y.json() : null)).then((v) => {
     if (!v || typeof v.eposta !== "string" || !v.eposta.includes("@")) return;
     EPOSTA = v.eposta;
     $("eposta").href = "mailto:" + EPOSTA;

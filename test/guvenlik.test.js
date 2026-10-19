@@ -297,7 +297,7 @@ test("bekçi: izinli adresin rakamları bilgide olmayan sayı sayılmaz", () => 
   assert.equal(b.gecti, true, b.neden);
 });
 
-test("istatistik: sayfa açılışı, tekil kişi, sohbet, soru ve tür isimsiz sayılır; uç yalnız sınav anahtarıyla, günler silinmez", async () => {
+test("istatistik: sayfa açılışı, sohbet, soru ve tür isimsiz sayılır; uç yalnız sınav anahtarıyla, günler silinmez", async () => {
   const geri = sahteModel();
   try {
     const env = { ...temelEnv(), DAVET_ANAHTARI: "davet-kodu-ornek", SINAV_ANAHTARI: "sinav-anahtari-ornek" };
@@ -306,6 +306,7 @@ test("istatistik: sayfa açılışı, tekil kişi, sohbet, soru ve tür isimsiz 
     await ac(); // aynı kişi ikinci kez: açılış 2, kişi 1
     await ac({ "X-Davet": "davet-kodu-ornek" });
     await ac({ "X-Davet": "yanlis-kod-ornek" }); // yanlış kod anonim sayılır
+    await ac({ "X-Tekrar": "1" }); // sayfanın ikinci isteği sayılmaz
     assert.equal((await istegiIsle(istek(soruGovdesi()), env)).status, 200);
     assert.equal((await istegiIsle(istek(soruGovdesi()), env)).status, 200);
     const oku = (anahtar) => istegiIsle(new Request("http://x/api/istatistik", { headers: anahtar ? { Authorization: `Bearer ${anahtar}` } : {} }), env);
@@ -316,24 +317,29 @@ test("istatistik: sayfa açılışı, tekil kişi, sohbet, soru ve tür isimsiz 
     const [g] = (await y.json()).gunler;
     assert.equal(g.gun, new Date().toISOString().slice(0, 10));
     assert.equal(g.ziyaret, 3);
-    assert.equal(g.kisi, 1);
     assert.equal(g.ziyaretDavet, 1);
-    assert.equal(g.kisiDavet, 1);
     assert.equal(g.soru, 2);
     assert.equal(g.sohbet, 1);
     assert.deepEqual(g.tur, { A: 2 });
     assert.deepEqual(g.saglayici, { "gemini:gemini-3.5-flash-lite": 2 });
     assert.doesNotMatch(JSON.stringify(g), /1\.2\.3\.4|İngilizce/); // IP ve soru metni yok
+    // Sınav isteği sayılmaz.
+    const sinavIstegi = istek(soruGovdesi(), { "X-Sinav-Anahtari": "sinav-anahtari-ornek" });
+    assert.equal((await istegiIsle(sinavIstegi, env)).status, 200);
+    const [g2] = (await sayacIslem(env.__depo, env, { islem: "istatistik" })).gunler;
+    assert.equal(g2.soru, 2);
+    assert.deepEqual(g2.tur, { A: 2 });
     // Gün dönünce günlük sayaçlar silinir, istatistik kalır; biten günün harcaması istatistiğe geçer.
+    const dun = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
     await env.__depo.put("usd", 0.25);
-    await env.__depo.put("gun", "2000-01-01");
-    await env.__depo.put("ist:2000-01-01", { soru: 7 });
+    await env.__depo.put("gun", dun);
+    await env.__depo.put(`ist:${dun}`, { soru: 7 });
+    await env.__depo.put("ist:2000-01-01", { soru: 1 });
     await sayacIslem(env.__depo, env, { islem: "butce" });
     const gunler = (await sayacIslem(env.__depo, env, { islem: "istatistik" })).gunler;
-    assert.ok(gunler.some((x) => x.gun === g.gun && x.soru === 2));
-    assert.equal(await env.__depo.get("z::1.2.3.4"), undefined);
-    // 2000-01-01 180 günden eski: silinir.
-    assert.ok(!gunler.some((x) => x.gun === "2000-01-01"));
+    assert.deepEqual(gunler.find((x) => x.gun === dun), { gun: dun, soru: 7, usd: 0.25 });
+    assert.equal(await env.__depo.get("usd"), undefined);
+    assert.ok(!gunler.some((x) => x.gun === "2000-01-01")); // 180 günden eski: silinir
   } finally { geri(); }
 });
 
@@ -346,4 +352,12 @@ test("istatistik: sınıra takılan soru sayılır, sınav sayılmaz", async () 
   const [g] = (await sayacIslem(depo, env, { islem: "istatistik" })).gunler;
   assert.equal(g.soru, 1);
   assert.deepEqual(g.durdu, { gunluk: 1 });
+});
+
+test("istatistik: doğrulamasız sayfa açılışı günlük tavanda durur", async () => {
+  const depo = bellekDeposu();
+  for (let i = 0; i < 1005; i++) await sayacIslem(depo, {}, { islem: "ziyaret", davet: false });
+  const [g] = (await sayacIslem(depo, {}, { islem: "istatistik" })).gunler;
+  assert.equal(g.ziyaret, 1000);
+  assert.ok([...(await depo.list()).keys()].length <= 3); // açılış başına yeni anahtar yazılmaz
 });

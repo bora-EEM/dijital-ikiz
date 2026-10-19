@@ -45,7 +45,7 @@ function corsBasliklari(istek, env) {
   const koken = istek.headers.get("Origin") || "";
   const basliklar = {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-Davet",
+    "Access-Control-Allow-Headers": "Content-Type, X-Davet, X-Tekrar",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
@@ -101,14 +101,18 @@ export async function istegiIsle(istek, env, ctx) {
     }
     // Sayfa açılışı istatistiğe yazılır (isimsiz toplam); sayaç düşerse adres yine verilir.
     const davet = Boolean(env.DAVET_ANAHTARI) && esit(istek.headers.get("X-Davet") || "", env.DAVET_ANAHTARI);
-    const ziyaret = sayacaSor(env, { islem: "ziyaret", ip: ipAnahtari(istek.headers.get("CF-Connecting-IP") || "yerel"), davet })
-      .catch((e) => console.error(`ziyaret sayılamadı: ${e.message}`));
+    // Sayfanın ikinci isteği (ilki düştüyse) sayılmaz.
+    const ziyaret = istek.headers.get("X-Tekrar") ? Promise.resolve()
+      : sayacaSor(env, { islem: "ziyaret", davet }).catch((e) => console.error(`ziyaret sayılamadı: ${e.message}`));
     if (ctx?.waitUntil) ctx.waitUntil(ziyaret);
     else await ziyaret;
     return json({ eposta: env.ILETISIM_EPOSTA }, 200, cors);
   }
   // İstatistik (kaç kişi girdi, kaç soru sordu): yalnız sınav anahtarıyla; anahtarsız istek ucun varlığını da görmez.
   if (url.pathname === "/api/istatistik" && istek.method === "GET") {
+    if (await hizSiniriAsildi(`istatistik-${ipAnahtari(istek.headers.get("CF-Connecting-IP") || "yerel")}`, env)) {
+      return json({ hata: SINIR_METNI.hiz, kod: "hiz" }, 429, cors);
+    }
     const anahtar = (istek.headers.get("Authorization") || "").replace(/^Bearer /, "");
     if (!env.SINAV_ANAHTARI || !esit(anahtar, env.SINAV_ANAHTARI)) return json({ hata: "bulunamadı" }, 404, cors);
     try {
