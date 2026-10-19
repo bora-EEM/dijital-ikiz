@@ -1,7 +1,8 @@
 # Cloudflare Workers ayarı. Gizli değerler buraya YAZILMAZ; `npx wrangler secret put <AD>` ile girilir:
 #   GEMINI_API_KEY, GROQ_API_KEY, GITHUB_TOKEN (yalnız bilgi deposunda Contents: read + Issues: write),
 #   GEMINI_UCRETLI_API_KEY (paralı yuva; yoksa o yuva kapalı),
-#   TURNSTILE_SECRET, IMZA_SIRRI, SINAV_ANAHTARI (araclar/guvenlik_sirlari.py kurar, değer yazdırmaz)
+#   TURNSTILE_SECRET, IMZA_SIRRI, SINAV_ANAHTARI (araclar/guvenlik_sirlari.py kurar, değer yazdırmaz),
+#   ILETISIM_EPOSTA (ikizin verdiği adres; yoksa ikiz cevap vermez), DAVET_ANAHTARI (özgeçmiş bağlantısının kodu)
 name = "dijital-ikiz"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
@@ -44,7 +45,9 @@ GUNLUK_SORU = "400"
 IP_GUNLUK = "60"
 OTURUM_SORU = "20"
 GUNLUK_KAYIT = "30"
+DAVET_GUNLUK = "300"
 GUNLUK_BUTCE_USD = "2"
 # Paralı yedek iki basamak (Bora'nın kararı 2026-10-19): önce aynı Flash-Lite paralı anahtarla (ücretsiz kota dolunca),
-# o da düşerse farklı model 3.8 Flash (Flash-Lite çöktüğü saatte o çalışıyordu). İkisi de sınavı geçti.
+# o da düşerse farklı model 3.8 Flash (Flash-Lite çöktüğü saatte o çalışıyordu). Aynı modelin paralı yuvası yalnız
+# ücretsiz yuva kota (429) yüzünden düştüyse denenir (src/ikiz.js). Her model ayrı sınavdan geçmeden listeye girmez.
 GEMINI_UCRETLI_MODELLER = "gemini-3.5-flash-lite,gemini-3.8-flash"

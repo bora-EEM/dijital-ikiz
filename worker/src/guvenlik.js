@@ -104,7 +104,8 @@ const normalize = (m) => m.normalize("NFKC").replace(/[\u0660-\u0669\u06F0-\u06F
 const sayiBicim = (s) => s.replace(/(\d)[.,](?=\d{3}\b)/g, "$1").replace(",", ".").replace(/^0+(?=\d)/, "");
 
 function sayilar(metin) {
-  return new Set((metin.replace(BAGLANTI, " ").replace(EPOSTA, " ").match(SAYI) || []).map(sayiBicim));
+  // Önce e-posta: bağlantı önce silinirse adresin alan adı gider, rakamlı yerel kısım (öğrenci numarası) sayı kalır.
+  return new Set((metin.replace(EPOSTA, " ").replace(BAGLANTI, " ").match(SAYI) || []).map(sayiBicim));
 }
 const kumele = (metin, desen) => new Set((metin.match(desen) || []).map((x) => x.trim()));
 

@@ -210,7 +210,8 @@ export async function istegiIsle(istek, env, ctx) {
   if (!ctx?.waitUntil) await odesme;
   if (sonuc.durum !== 200) {
     console.error(`cevap yok: ${sonuc.hata} ${JSON.stringify(sonuc.denemeler)}`);
-    return json(gelistirme ? { hata: sonuc.hata, denemeler: sonuc.denemeler } : { hata: sonuc.hata }, sonuc.durum, cors);
+    // Yayında ziyaretçi iç ayrıntı görmez ("İletişim adresi ayarlanmadı." gibi): genel cümle gider.
+    return json(gelistirme ? { hata: sonuc.hata, denemeler: sonuc.denemeler } : { hata: GENEL_HATA }, sonuc.durum, cors);
   }
 
   const sonMesaj = mesajlar[mesajlar.length - 1].content;

@@ -8,7 +8,13 @@ const ILETISIM = API.replace(/sohbet$/, "iletisim");
 const DAVET = (() => {
   const d = new URLSearchParams(location.search).get("d");
   try {
-    if (d) sessionStorage.setItem("davet", d);
+    if (d) {
+      sessionStorage.setItem("davet", d);
+      // Kod adres çubuğunda kalmasın: ekran görüntüsüyle ya da paylaşılan bağlantıyla yayılmasın.
+      const temiz = new URL(location.href);
+      temiz.searchParams.delete("d");
+      history.replaceState(null, "", temiz);
+    }
     return d || sessionStorage.getItem("davet") || "";
   } catch { return d || ""; }
 })().slice(0, 64);
@@ -89,7 +95,8 @@ function balon(sinif, metin) {
   return d;
 }
 
-function iletBaglantisi(soru) {
+async function iletBaglantisi(soru) {
+  if (!EPOSTA) await adresiAl(); // ilk istek düştüyse bir kez daha
   if (!EPOSTA) return;
   const a = document.createElement("a");
   a.className = "ilet";
@@ -221,11 +228,14 @@ $("bilgiDugme").onclick = () => {
   $("bilgiKutu").hidden = !acik;
   $("bilgiDugme").setAttribute("aria-expanded", String(acik));
 };
-fetch(ILETISIM).then((y) => (y.ok ? y.json() : null)).then((v) => {
-  if (!v || typeof v.eposta !== "string" || !v.eposta.includes("@")) return;
-  EPOSTA = v.eposta;
-  $("eposta").href = "mailto:" + EPOSTA;
-  $("eposta").hidden = false;
-}).catch(() => {});
+function adresiAl() {
+  return fetch(ILETISIM).then((y) => (y.ok ? y.json() : null)).then((v) => {
+    if (!v || typeof v.eposta !== "string" || !v.eposta.includes("@")) return;
+    EPOSTA = v.eposta;
+    $("eposta").href = "mailto:" + EPOSTA;
+    $("eposta").hidden = false;
+  }).catch(() => {});
+}
+adresiAl();
 if (LINKEDIN) $("linkedin").href = LINKEDIN; else $("linkedin").remove();
 diliUygula();

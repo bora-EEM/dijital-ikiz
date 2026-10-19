@@ -1,7 +1,7 @@
 // Ağ gerektirmeyen kurallar: tür ve hazır cevap, istek doğrulama, taslak koruması, sağlayıcı sırası, CORS, dil.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cevabiCoz, hazirCevap, mesajlariDogrula, bilgiOnayliMi, saglayicilar } from "../worker/src/ikiz.js";
+import { cevabiCoz, cevapla, hazirCevap, mesajlariDogrula, bilgiOnayliMi, saglayicilar } from "../worker/src/ikiz.js";
 import { istegiIsle } from "../worker/src/index.js";
 
 test("C türü: sunucu hazır cümleyi yazar ve soru iletilir", () => {
@@ -55,7 +55,10 @@ test("onaylanmamış taslak yayında konuşmaz", async () => {
   });
   const yanit = await istegiIsle(istek, { ILETISIM_EPOSTA: "ornek@okul.edu.tr", BILGI_METNI: "[ONAY: x]", GROQ_API_KEY: "yok" }, null);
   assert.equal(yanit.status, 503);
-  assert.match((await yanit.json()).hata, /onaylanmadı/);
+  // Yayında iç neden ziyaretçiye gitmez, genel cümle gider.
+  assert.match((await yanit.json()).hata, /Şu an cevap veremiyorum/);
+  assert.equal((await cevapla([{ role: "user", content: "merhaba" }], { ILETISIM_EPOSTA: "o@x.tr", BILGI_METNI: "[ONAY: x]" })).hata,
+    "Bilgi dosyası henüz onaylanmadı.");
 });
 
 test("sağlayıcı sırası: sınavı geçen Gemini önce; Groq varsayılan kapalı, yazılırsa yedek; anahtarı olmayan atlanır, biri zorlanabilir", () => {
@@ -267,16 +270,17 @@ test("'stop' deyip boş dönen ücretsiz modele bir kez daha sorulur; ikinci bo�
     assert.equal(s.saglayici, "cloudflare:@cf/openai/gpt-oss-120b");
     assert.equal(giden.length, 1);
 
-    // Bora'nın sırası (önce ücretsiz, sonra paralı): ücretsiz yuva boş dönünce üç yuvalık sırada yeniden deneme
-    // bütçeye sığmaz, ziyaretçi beklemeden paralı yuva cevaplar.
+    // Paralı yuva varken de ücretsiz yuvaya önce bir kez daha sorulur (paralıdan ucuz); o da boşsa paralı cevaplar.
     const ucretli = { ...env, GEMINI_UCRETLI_MODELLER: "gemini-3.8-flash", GEMINI_UCRETLI_API_KEY: "p" };
     s = await kos([bos(), dolu()], ucretli);
+    assert.equal(s.saglayici, "gemini:gemini-3.5-flash-lite");
+    s = await kos([bos(), bos(), dolu()], ucretli);
     assert.equal(s.saglayici, "gemini-ucretli:gemini-3.8-flash");
-    assert.equal(giden.length, 2);
+    assert.equal(giden.length, 3);
     // Paralı yuvanın boş çağrısı da faturalanır: yeniden sorulmaz, harcama bir kez yazılır, Cloudflare'e geçilir.
-    s = await kos([bos(), bos("stop", { prompt_tokens: 1000, completion_tokens: 0, total_tokens: 1000 })], ucretli);
+    s = await kos([bos(), bos(), bos("stop", { prompt_tokens: 1000, completion_tokens: 0, total_tokens: 1000 })], ucretli);
     assert.equal(s.saglayici, "cloudflare:@cf/openai/gpt-oss-120b");
-    assert.equal(giden.length, 2);
+    assert.equal(giden.length, 3);
     assert.ok(s.maliyetUsd > 0 && s.maliyetUsd < 0.001);
 
     // İlk deneme geç döndü: yeniden deneme + sıradaki yuva bütçeye sığmıyor, doğrudan Cloudflare'e geçilir.
@@ -464,4 +468,46 @@ test("uzun cevap kısaltılırken görüşme sonu sorularının sabit cümlesi k
   const { mesajlar } = mesajlariDogrula({ mesajlar: [{ rol: "assistant", icerik: uzun }, { rol: "user", icerik: "cevap" }] });
   assert.ok(mesajlar[0].content.length <= 1500);
   assert.ok(soruSoruldu(mesajlar[0].content));
+});
+
+test("dört yuvalı sıra: aynı modelin paralı yuvası yalnız kota (429) düşüşünde denenir; hepsi susarsa 22 sn'yi aşmaz", async () => {
+  const { cevapla } = await import("../worker/src/ikiz.js");
+  const gercek = globalThis.fetch, gercekSaat = Date.now;
+  const dolu = () => new Response(JSON.stringify({ choices: [{ message: { content: '{"tur":"A","cevap":"B2."}' } }] }), { status: 200 });
+  let saat = gercekSaat(), sira = [], cfSayisi = 0, cfSure = 0;
+  const giden = [];
+  const AI = { run: async (_m, _g, s) => { cfSayisi++; cfSure = s; return { choices: [{ message: { content: '{"tur":"A","cevap":"B2."}' } }] }; } };
+  globalThis.fetch = async (url, istek) => {
+    giden.push(JSON.parse(istek.body).model + (istek.headers.Authorization.endsWith("p") ? ":paralı" : ""));
+    const c = sira.shift();
+    if (c === "sus") { saat += 8000; const e = new Error("zaman aşımı"); e.name = "TimeoutError"; throw e; }
+    return c;
+  };
+  Date.now = () => saat;
+  const env = { ILETISIM_EPOSTA: "ornek@okul.edu.tr", BILGI_METNI: "B2", GEMINI_API_KEY: "m", GEMINI_UCRETLI_API_KEY: "p",
+    GEMINI_UCRETLI_MODELLER: "gemini-3.5-flash-lite,gemini-3.8-flash", AI };
+  const soru = [{ role: "user", content: "İngilizce seviyen?" }];
+  const kos = async (cevaplar) => { sira = cevaplar; giden.length = 0; cfSayisi = 0; return cevapla(soru, env, "tr", async () => {}); };
+  try {
+    // Ücretsiz kota doldu (429): aynı model paralı anahtarla cevaplar.
+    let s = await kos([new Response("kota", { status: 429 }), dolu()]);
+    assert.equal(s.saglayici, "gemini-ucretli:gemini-3.5-flash-lite");
+    assert.deepEqual(giden, ["gemini-3.5-flash-lite", "gemini-3.5-flash-lite:paralı"]);
+    // Model yoğun (503): paralı Flash-Lite atlanır, doğrudan 3.8.
+    s = await kos([new Response("yoğun", { status: 503 }), dolu()]);
+    assert.equal(s.saglayici, "gemini-ucretli:gemini-3.8-flash");
+    assert.deepEqual(giden, ["gemini-3.5-flash-lite", "gemini-3.8-flash:paralı"]);
+    // Hepsi susuyor: ücretsiz 8 sn, 3.8 8 sn, Cloudflare kalan süreyle; toplam 22 sn'yi aşmaz.
+    const bas = saat;
+    s = await kos(["sus", "sus"]);
+    assert.equal(s.saglayici, "cloudflare:@cf/openai/gpt-oss-120b");
+    assert.deepEqual(giden, ["gemini-3.5-flash-lite", "gemini-3.8-flash:paralı"]);
+    assert.ok(saat - bas <= 22_000, `${saat - bas} ms`);
+    // Paralı yuva 'birkaç saniye sonra' dese de ikinci kez çağrılmaz.
+    env.AI = undefined;
+    s = await kos([new Response("kota", { status: 429 }), new Response("kota", { status: 429, headers: { "retry-after": "2" } }),
+      new Response("kota", { status: 429, headers: { "retry-after": "2" } })]);
+    assert.equal(s.durum, 503);
+    assert.equal(giden.length, 3);
+  } finally { globalThis.fetch = gercek; Date.now = gercekSaat; }
 });

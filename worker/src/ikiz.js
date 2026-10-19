@@ -513,24 +513,36 @@ export async function cevapla(mesajlar, env, sayfaDili = "tr", bekle = (ms) => n
     return null;
   };
   const sira = saglayicilar(env);
-  for (const [i, s] of sira.entries()) {
+  // Aynı modelin paralı yuvası yalnız ücretsiz yuva kota yüzünden (HTTP 429) düştüyse denenir: zaman aşımı, 5xx ya da
+  // boş cevapta model o an yoğundur, paralı anahtarla da büyük olasılıkla düşer; 8 sn ve para boşa gider, sıradaki
+  // farklı modele geçilir (inceleme 2026-10-19).
+  const yogunModeller = new Set();
+  for (const s of sira) {
     // Toplam bütçe her yuvadan önce denetlenir: üç yuva da sustuğunda 24 sn sürüyordu, bütçe 22 (açık taraması 2026-10-19).
     if (Date.now() + 1000 >= bitis) {
       denemeler.push({ saglayici: s.ad, neden: "süre bütçesi doldu" });
       break;
     }
+    if (s.ucretli && yogunModeller.has(s.model)) {
+      denemeler.push({ saglayici: s.ad, neden: "aynı model az önce kota dışı düştü, atlandı" });
+      continue;
+    }
     let sonuc = await dene(s);
     // Gemini Flash-Lite bazen "stop" deyip hiç token döndürmüyor (sınav 2026-10-19): geçici bir aksama, aynı modele bir
     // kez daha sorulur. Yalnız "stop"ta ("length" düşünme payının bittiğidir, tekrarı da biter), yalnız ücretsiz yuvada
-    // (paralıda boş çağrı da faturalanır, sıradaki ücretsiz yuva var) ve ancak yeniden deneme ile sıradaki yuvaların hepsi
-    // bütçeye sığıyorsa: en kötü bekleme yeniden deneme yokkenkinden uzamaz.
+    // (paralıda boş çağrı da faturalanır) ve ancak yeniden deneme ile bir yuva daha bütçeye sığıyorsa. Aynı modelin
+    // paralı yuvası boş cevaptan sonra atlandığı için bu deneme onun yerini alır; toplam bekleme yukarıdaki bütçe
+    // denetimiyle 22 sn'yi aşmaz.
     const son = denemeler.at(-1);
     if (!sonuc && !s.ucretli && son?.neden === "boş cevap" && son.bitis === "stop"
-      && Date.now() + SINIR.zamanAsimiMs * (sira.length - i) <= bitis) sonuc = await dene(s);
+      && Date.now() + SINIR.zamanAsimiMs * 2 <= bitis) sonuc = await dene(s);
     if (sonuc) return sonuc;
+    if (!s.ucretli && denemeler.at(-1)?.neden !== "HTTP 429") yogunModeller.add(s.model);
   }
   // Hepsi düştüyse ve biri "birkaç saniye sonra" dediyse en kısa bekleyeni bir kez daha dene.
-  const kisa = denemeler.filter((d) => d.bekleSn).sort((a, b) => a.bekleSn - b.bekleSn)[0];
+  // Paralı yuva ikinci kez çağrılmaz: bütçe ayırması her paralı yuvayı bir kez sayar (inceleme 2026-10-19).
+  const ucretliAdlar = new Set(sira.filter((s) => s.ucretli).map((s) => s.ad));
+  const kisa = denemeler.filter((d) => d.bekleSn && !ucretliAdlar.has(d.saglayici)).sort((a, b) => a.bekleSn - b.bekleSn)[0];
   if (kisa && Date.now() + kisa.bekleSn * 1000 + SINIR.zamanAsimiMs <= bitis) {
     await bekle(kisa.bekleSn * 1000);
     const sonuc = await dene(sira.find((s) => s.ad === kisa.saglayici));

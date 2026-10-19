@@ -48,6 +48,9 @@ const env = {
   TURNSTILE_ZORUNLU: "", // yerelde bot doğrulaması yok (site anahtarı yalnız bora-eem.github.io için)
 };
 if (process.env.KAYIT !== "1") delete env.GITHUB_TOKEN; // yerelde kayıt varsayılan kapalı
+// Yerelde paralı yuva varsayılan kapalı: yerel sayaç bellekte, her yeniden başlatmada günlük tavan sıfırlanır; gezinme
+// ücretsiz pay bitince paralı anahtarı harcamasın. Sınav ya da ölçüm için UCRETLI=1 (inceleme 2026-10-19).
+if (process.env.UCRETLI !== "1") delete env.GEMINI_UCRETLI_API_KEY;
 
 // Yerelde Workers AI bağlaması yok; hesap kimliği ve erişim anahtarı ortamdan verilirse aynı modele REST ile gidilir
 // (sınavın üçüncü yuvayı da koşabilmesi için). Değerler yazdırılmaz.

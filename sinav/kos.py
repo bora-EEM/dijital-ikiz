@@ -159,7 +159,7 @@ def main() -> int:
         uydurma += h.get("uydurma") is True
         hakemsiz += h.get("uydurma") is None
         kural_hatasi += bool(hatalar)
-        isaret = "✓" if not hatalar and h.get("uydurma") is False else "✗"
+        isaret = "✗" if hatalar or h.get("uydurma") else ("✓" if h.get("uydurma") is False else "○")
         print(f"{isaret} {s['no']:>2} [{s['tur']}] {s['soru'][:55]:<55} {sonuc.get('sure', 0):>5.1f} sn"
               + (f"  ← {'; '.join(hatalar)}" if hatalar else "")
               + (f"  ← UYDURMA: {h.get('neden')}" if h.get("uydurma") else "")
@@ -167,6 +167,10 @@ def main() -> int:
         satirlar.append({**s, "sonuc": sonuc, "kural_hatalari": hatalar, "hakem": h})
 
     gecen = sum(1 for r in satirlar if not r["kural_hatalari"] and r["hakem"].get("uydurma") is False)
+    if a.hakem == "yok":
+        # Hakemsiz koşu "geçti" demez: kural sonucu ayrı, uydurma ölçülmedi.
+        kural_gecen = sum(1 for r in satirlar if not r["kural_hatalari"])
+        print(f"\n{a.saglayici}: kural {kural_gecen}/{len(satirlar)} geçti · uydurma ölçülmedi (hakem kapalı)")
     print(f"\n{a.saglayici}: {gecen}/{len(satirlar)} geçti · uydurma {uydurma} · hakemsiz {hakemsiz} · "
           f"kural hatası {kural_hatasi} · hakem {hakem_modeli} · gizli kural {gizli_sayi} soruda")
 
@@ -177,6 +181,8 @@ def main() -> int:
                                  "uydurma": uydurma, "hakemsiz": hakemsiz, "kural_hatasi": kural_hatasi, "sorular": satirlar},
                                 ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"rapor: {dosya.relative_to(APP)}")
+    if a.hakem == "yok":
+        return 2  # karar verilemez: uydurma ölçülmedi
     return 0 if gecen == len(satirlar) else 1
 
 

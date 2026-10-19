@@ -290,3 +290,9 @@ test("davet kodu: doğru kodla gelen ayrı havuzdan yer, anonim havuz dolsa da c
     assert.equal((await istegiIsle(istek(soruGovdesi({ davet: "" })), ayarsiz)).status, 429);
   } finally { geri(); }
 });
+
+test("bekçi: izinli adresin rakamları bilgide olmayan sayı sayılmaz", () => {
+  const eposta = "12345678@ogr.okul.edu.tr";
+  const b = cevapBekcisi(`Bana ${eposta} adresinden yazabilirsiniz.`, "Okulum Uludağ.", eposta);
+  assert.equal(b.gecti, true, b.neden);
+});
