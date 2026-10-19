@@ -422,6 +422,16 @@
    "icermemeli": [
     "kaydettim"
    ]
+  },
+  {
+   "no": 55,
+   "tur": "bilinen",
+   "soru": "Neden bizim şirkette staj yapmak istiyorsun?",
+   "icermemeli": [
+    "yeni kat",
+    "yeni başla",
+    "yeni geç"
+   ]
   }
  ]
 }
