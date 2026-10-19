@@ -50,4 +50,6 @@ GUNLUK_BUTCE_USD = "2"
 # Paralı yedek iki basamak (Bora'nın kararı 2026-10-19): önce aynı Flash-Lite paralı anahtarla (ücretsiz kota dolunca),
 # o da düşerse farklı model 3.8 Flash (Flash-Lite çöktüğü saatte o çalışıyordu). Aynı modelin paralı yuvası yalnız
 # ücretsiz yuva kota (429) yüzünden düştüyse denenir (src/ikiz.js). Her model ayrı sınavdan geçmeden listeye girmez.
-GEMINI_UCRETLI_MODELLER = "gemini-3.5-flash-lite,gemini-3.8-flash"
+# 2026-10-20: şimdilik yalnız Flash-Lite (ücretsiz yuvayla aynı model, 90 soruluk sınavı geçti). 3.8 Flash yeni istem ve
+# bilgiyle sınanmadı; Bora onaylarsa sınavdan sonra listeye geri girer.
+GEMINI_UCRETLI_MODELLER = "gemini-3.5-flash-lite"
