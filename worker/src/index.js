@@ -45,7 +45,7 @@ function corsBasliklari(istek, env) {
   const koken = istek.headers.get("Origin") || "";
   const basliklar = {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, X-Davet",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
@@ -99,7 +99,24 @@ export async function istegiIsle(istek, env, ctx) {
       console.error("ILETISIM_EPOSTA ayarı yok");
       return json({ eposta: null }, 503, cors);
     }
+    // Sayfa açılışı istatistiğe yazılır (isimsiz toplam); sayaç düşerse adres yine verilir.
+    const davet = Boolean(env.DAVET_ANAHTARI) && esit(istek.headers.get("X-Davet") || "", env.DAVET_ANAHTARI);
+    const ziyaret = sayacaSor(env, { islem: "ziyaret", ip: ipAnahtari(istek.headers.get("CF-Connecting-IP") || "yerel"), davet })
+      .catch((e) => console.error(`ziyaret sayılamadı: ${e.message}`));
+    if (ctx?.waitUntil) ctx.waitUntil(ziyaret);
+    else await ziyaret;
     return json({ eposta: env.ILETISIM_EPOSTA }, 200, cors);
+  }
+  // İstatistik (kaç kişi girdi, kaç soru sordu): yalnız sınav anahtarıyla; anahtarsız istek ucun varlığını da görmez.
+  if (url.pathname === "/api/istatistik" && istek.method === "GET") {
+    const anahtar = (istek.headers.get("Authorization") || "").replace(/^Bearer /, "");
+    if (!env.SINAV_ANAHTARI || !esit(anahtar, env.SINAV_ANAHTARI)) return json({ hata: "bulunamadı" }, 404, cors);
+    try {
+      return json(await sayacaSor(env, { islem: "istatistik" }), 200, cors);
+    } catch (e) {
+      console.error(`istatistik okunamadı: ${e.message}`);
+      return json({ hata: GENEL_HATA }, 503, cors);
+    }
   }
   if (url.pathname !== "/api/sohbet") return json({ hata: "bulunamadı" }, 404, cors);
   if (istek.method !== "POST") return json({ hata: "yalnız POST" }, 405, cors);
@@ -199,6 +216,15 @@ export async function istegiIsle(istek, env, ctx) {
   const is = cevapla(mesajlar, calismaEnv, govde?.dil === "en" ? "en" : "tr");
   const odesme = is.then((s) => harcamayiYaz(s.maliyetUsd), () => harcamayiYaz(izin.rezerve));
   if (ctx?.waitUntil) ctx.waitUntil(odesme);
+  // İstatistik: türü, cevaplayan modeli ve dili (sınav sayılmaz). Ziyaretçinin cevabı bunu beklemez.
+  if (!sinav) {
+    const ist = is.then((s) => (s.durum === 200 ? { tur: s.tur, saglayici: s.saglayici, dil: govde?.dil === "en" ? "en" : "tr" } : { cevapsiz: true }),
+      () => ({ cevapsiz: true }))
+      .then((v) => sayacaSor(env, { islem: "sonuc", ...v }))
+      .catch((e) => console.error(`istatistik yazılamadı: ${e.message}`));
+    if (ctx?.waitUntil) ctx.waitUntil(ist);
+    else await ist;
+  }
   let sonuc;
   try {
     sonuc = await is;

@@ -3,6 +3,8 @@
 // aynı mantık bellekte koşar. Sayaçlar gün değişince silinir; yalnız bilgi yedeği kalır.
 // Not: "cloudflare:workers" içe aktarılmaz (Node'da yerel sunucu ve testler de bu dosyayı yükler); klasik
 // fetch arayüzlü Durable Object yeterli.
+// İstatistik (Bora'nın isteği 2026-10-19): günlük isimsiz toplamlar "ist:<gün>" anahtarında, gün değişince silinmez,
+// 180 gün tutulur. Kişi, IP ya da soru metni yazılmaz; tekil ziyaretçi o günün "z:" anahtarıyla bulunur (gün sonu silinir).
 
 export const VARSAYILAN = {
   gunlukSoru: 400,     // bütün ziyaretçiler, gün başına (normal kullanım: gün başına birkaç İK sohbeti × 10–20 soru)
@@ -34,12 +36,30 @@ export function sinirlar(env = {}) {
 }
 
 const bugun = () => new Date().toISOString().slice(0, 10);
+const IST_GUN = 180;
+
+// yollar: ["soru"] ya da ["tur", "A"] biçiminde; ikincisi alt sayaç (tür, sağlayıcı, dil, sınır kodu).
+async function istArtir(depo, gun, yollar) {
+  const a = `ist:${gun}`;
+  const ist = (await depo.get(a)) || {};
+  for (const [k, alt] of yollar) {
+    if (alt === undefined) ist[k] = (ist[k] || 0) + 1;
+    else ist[k] = { ...(ist[k] || {}), [alt]: ((ist[k] || {})[alt] || 0) + 1 };
+  }
+  await depo.put(a, ist);
+}
 
 // Depo arayüzü: get(anahtar), put(anahtar, deger), list() → Map, delete(anahtarlar[]). Durable Object'in storage'ı da
 // bellekteki Map de bu arayüzü sağlar.
 async function gunuTazele(depo, gun) {
-  if ((await depo.get("gun")) === gun) return;
-  const eski = [...(await depo.list()).keys()].filter((a) => a !== "bilgi" && a !== "gun");
+  const onceki = await depo.get("gun");
+  if (onceki === gun) return;
+  // Biten günün harcaması istatistiğe geçer (günlük "usd" sayacı birazdan silinir).
+  const usd = await depo.get("usd");
+  if (onceki && usd) await depo.put(`ist:${onceki}`, { ...((await depo.get(`ist:${onceki}`)) || {}), usd });
+  const sinir = new Date(Date.parse(gun) - IST_GUN * 86_400_000).toISOString().slice(0, 10);
+  const eski = [...(await depo.list()).keys()].filter((a) => a !== "bilgi" && a !== "gun"
+    && (!a.startsWith("ist:") || a.slice(4) < sinir));
   // Durable Object deposu tek çağrıda en çok 128 anahtar siler (fazlası hata, ikiz gün boyu susardı; inceleme 2026-10-13).
   for (let i = 0; i < eski.length; i += 128) await depo.delete(eski.slice(i, i + 128));
   await depo.put("gun", gun);
@@ -57,15 +77,24 @@ export async function sayacIslem(depo, env, istek) {
       // Davet koduyla gelen (özgeçmişteki bağlantı) ayrı havuzdan yer: anonim havuzu dolduran onu kapatamaz.
       const havuz = istek.davet ? "davet" : "soru";
       const genel = await al(havuz);
-      if (genel >= (istek.davet ? s.davetGunluk : s.gunlukSoru)) return { tamam: false, kod: "genel" };
+      const ek = istek.davet ? "Davet" : "";
+      // Reddedilen soru istatistikte "sınıra takıldı" olarak sayılır (sınav sayılmaz).
+      const reddet = async (kod) => {
+        if (!istek.sinav) await istArtir(depo, gun, [["durdu", kod]]);
+        return { tamam: false, kod };
+      };
+      if (genel >= (istek.davet ? s.davetGunluk : s.gunlukSoru)) return reddet("genel");
+      const oturumSayisi = istek.oturum ? await al(`o:${istek.oturum}`) : 0;
       if (!istek.sinav) {
-        if ((await al(`ip:${istek.ip}`)) >= s.ipGunluk) return { tamam: false, kod: "gunluk" };
-        if (istek.oturum && (await al(`o:${istek.oturum}`)) >= s.oturumSoru) return { tamam: false, kod: "oturum" };
+        if ((await al(`ip:${istek.ip}`)) >= s.ipGunluk) return reddet("gunluk");
+        if (istek.oturum && oturumSayisi >= s.oturumSoru) return reddet("oturum");
       }
       await depo.put(havuz, genel + 1);
       if (!istek.sinav) {
         await depo.put(`ip:${istek.ip}`, (await al(`ip:${istek.ip}`)) + 1);
-        if (istek.oturum) await depo.put(`o:${istek.oturum}`, (await al(`o:${istek.oturum}`)) + 1);
+        if (istek.oturum) await depo.put(`o:${istek.oturum}`, oturumSayisi + 1);
+        // Oturumun ilk sorusu "sohbet" sayılır: kaç sohbet açıldı, kaç soru soruldu.
+        await istArtir(depo, gun, [[`soru${ek}`], ...(istek.oturum && !oturumSayisi ? [[`sohbet${ek}`]] : [])]);
       }
       // Bütçe aynı turda: sayaca soru başına tek gidiş. Paralı yuva kullanılabilecekse en kötü maliyet önce
       // ayrılır (rezerve), gerçek maliyet gelince fark "harca" ile düzeltilir: aynı anda gelen sorular eski toplamı
@@ -75,6 +104,29 @@ export async function sayacIslem(depo, env, istek) {
       const butceDoldu = usd + rezerve > s.gunlukButceUsd;
       if (!butceDoldu && rezerve) await depo.put("usd", usd + rezerve);
       return { tamam: true, butceDoldu, rezerve: butceDoldu ? 0 : rezerve };
+    }
+    case "ziyaret": {
+      // Sayfa açılışı (sayfa iletişim adresini isterken). Aynı IP günde bir kez "kişi" sayılır.
+      const ek = istek.davet ? "Davet" : "";
+      const z = `z:${ek}:${istek.ip}`;
+      const yeni = !(await depo.get(z));
+      if (yeni) await depo.put(z, 1);
+      await istArtir(depo, gun, [[`ziyaret${ek}`], ...(yeni ? [[`kisi${ek}`]] : [])]);
+      return { tamam: true };
+    }
+    case "sonuc": {
+      // Cevabın türü, cevaplayan model ve dil; cevap verilemediyse "cevapsiz". Metin yazılmaz.
+      const yollar = istek.cevapsiz ? [["cevapsiz"]]
+        : [["tur", String(istek.tur || "?")], ["saglayici", String(istek.saglayici || "?")], ["dil", String(istek.dil || "?")]];
+      await istArtir(depo, gun, yollar);
+      return { tamam: true };
+    }
+    case "istatistik": {
+      const gunler = [...(await depo.list()).entries()].filter(([a]) => a.startsWith("ist:"))
+        .map(([a, d]) => ({ gun: a.slice(4), ...d })).sort((x, y) => (x.gun < y.gun ? 1 : -1));
+      const bugunku = gunler.find((g) => g.gun === gun);
+      if (bugunku) bugunku.usd = await al("usd");
+      return { gunler };
     }
     case "butce": {
       const usd = await al("usd");
