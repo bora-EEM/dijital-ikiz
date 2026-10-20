@@ -11,7 +11,8 @@
 // Sınav ve sağlık kontrolü X-Sinav-Anahtari ile 3 ve 4'ü atlar (anahtar yalnız Cloudflare sırrında ve Bora'da).
 import { bilgiyiAl, cevapla, hazirCevap, mesajlariDogrula, soruyuKaydet, isverenCevabiniKaydet, saglayicilar } from "./ikiz.js";
 import { sayacaSor, Sayac } from "./sayac.js";
-import { ipAnahtari, cevapImzasi, cevapImzasiDogru, oturumOlustur, oturumDogrula, turnstileDogrula, esit } from "./guvenlik.js";
+import { ipAnahtari, cevapImzasi, cevapImzasiDogru, oturumOlustur, oturumDogrula, turnstileDogrula, esit,
+  kisiselBilgiyiGizle, oturumKayitKimligi } from "./guvenlik.js";
 
 export { Sayac };
 
@@ -108,17 +109,28 @@ export async function istegiIsle(istek, env, ctx) {
     else await ziyaret;
     return json({ eposta: env.ILETISIM_EPOSTA }, 200, cors);
   }
-  // İstatistik (kaç kişi girdi, kaç soru sordu): yalnız sınav anahtarıyla; anahtarsız istek ucun varlığını da görmez.
-  if (url.pathname === "/api/istatistik" && istek.method === "GET") {
+  // Bora'nın uçları: istatistik sınav anahtarıyla; oturum kayıtlarını okuma ve arşivledikten sonra silme yalnız Bora'nın
+  // bilgisayarındaki ayrı anahtarla (BORA_ANAHTARI; sınav anahtarı Actions'ta da durur, konuşmalara açılmamalı).
+  // Anahtarsız istek ucun varlığını da görmez.
+  const boraUcu = { "GET /api/istatistik": "istatistik", "GET /api/oturumlar": "oturumlar", "POST /api/oturumlar/sil": "oturumSil" }[
+    `${istek.method} ${url.pathname}`];
+  if (boraUcu) {
     if (await hizSiniriAsildi(`istatistik-${ipAnahtari(istek.headers.get("CF-Connecting-IP") || "yerel")}`, env)) {
       return json({ hata: SINIR_METNI.hiz, kod: "hiz" }, 429, cors);
     }
     const anahtar = (istek.headers.get("Authorization") || "").replace(/^Bearer /, "");
-    if (!env.SINAV_ANAHTARI || !esit(anahtar, env.SINAV_ANAHTARI)) return json({ hata: "bulunamadı" }, 404, cors);
+    const gereken = boraUcu === "istatistik" ? env.SINAV_ANAHTARI : env.BORA_ANAHTARI;
+    if (!gereken || !esit(anahtar, gereken)) return json({ hata: "bulunamadı" }, 404, cors);
     try {
-      return json(await sayacaSor(env, { islem: "istatistik" }), 200, cors);
+      let ek = {};
+      if (boraUcu === "oturumSil") {
+        const ham = await istek.text();
+        if (ham.length > 64 * 1024) return json({ hata: "istek çok büyük" }, 413, cors);
+        ek = { kayitlar: JSON.parse(ham || "{}").kayitlar };
+      }
+      return json(await sayacaSor(env, { islem: boraUcu, ...ek }), 200, cors);
     } catch (e) {
-      console.error(`istatistik okunamadı: ${e.message}`);
+      console.error(`${boraUcu} yapılamadı: ${e.message}`);
       return json({ hata: GENEL_HATA }, 503, cors);
     }
   }
@@ -186,6 +198,7 @@ export async function istegiIsle(istek, env, ctx) {
 
   // 5. Günlük sayaç. Sayaca ulaşılamazsa kapalı kalınır (sınırsız açık kalmaktansa).
   let izin;
+  let davet = false;
   try {
     // Paralı yuva sıradaysa bir sorunun en kötü maliyeti baştan ayrılır: 14.000 girdi token (istem ~9.500, Gemini
     // sayımı 2026-10-19; en uzun geçmiş 8 mesaj ~2.800; bilgi dosyasının büyümesine pay) ve 2.000 çıktı token
@@ -194,7 +207,7 @@ export async function istegiIsle(istek, env, ctx) {
     const rezerve = saglayicilar(env).filter((s) => s.ucretli)
       .reduce((t, s) => t + (14_000 * s.ucretli.girdi + 2_000 * s.ucretli.cikti) / 1e6, 0);
     // Davet kodu sunucunun gizli ayarında (DAVET_ANAHTARI); açık depoda değil, yalnız özgeçmişteki bağlantıda.
-    const davet = Boolean(env.DAVET_ANAHTARI) && esit(String(govde?.davet ?? ""), env.DAVET_ANAHTARI);
+    davet = Boolean(env.DAVET_ANAHTARI) && esit(String(govde?.davet ?? ""), env.DAVET_ANAHTARI);
     izin = await sayacaSor(env, { islem: "izin", ip: ipKey, oturum, sinav, rezerve, davet });
   } catch (e) {
     console.error(`sayaç ulaşılamadı: ${e.message}`);
@@ -229,22 +242,39 @@ export async function istegiIsle(istek, env, ctx) {
     if (ctx?.waitUntil) ctx.waitUntil(ist);
     else await ist;
   }
+  // Oturum kaydı (Bora'nın kararı 2026-10-21): soru ve ziyaretçiye giden cevap, ikisinde de e-posta ve telefon gizli
+  // (ikizin kendi iletişim adresi hariç); IP yok.
+  // Sınav kaydedilmez; kayıt düşerse ziyaretçinin cevabı etkilenmez.
+  const sonMesaj = mesajlar[mesajlar.length - 1].content;
+  const oturumaYaz = async (v) => {
+    if (sinav || !oturum) return;
+    const izinli = [env.ILETISIM_EPOSTA];
+    if (v.cevap) v = { ...v, cevap: kisiselBilgiyiGizle(v.cevap, izinli) };
+    const kayit = oturumKayitKimligi(oturum, env.IMZA_SIRRI)
+      .then((kimlik) => sayacaSor(env, { islem: "oturumYaz", kimlik, zaman: new Date().toISOString(), davet,
+        dil: govde?.dil === "en" ? "en" : "tr", soru: kisiselBilgiyiGizle(sonMesaj, izinli), ...v }))
+      .then((r) => { if (!r?.tamam) console.error(`oturum kaydı yazılmadı: ${r?.neden}`); })
+      .catch((e) => console.error(`oturum kaydı yazılamadı: ${e.message}`));
+    if (ctx?.waitUntil) ctx.waitUntil(kayit);
+    else await kayit;
+  };
   let sonuc;
   try {
     sonuc = await is;
   } catch (e) {
     console.error(`cevaplanamadı: ${e.message}`);
     if (!ctx?.waitUntil) await odesme;
+    await oturumaYaz({ cevapsiz: true });
     return json(gelistirme ? { hata: GENEL_HATA, ayrinti: e.message } : { hata: GENEL_HATA }, 503, cors);
   }
   if (!ctx?.waitUntil) await odesme;
   if (sonuc.durum !== 200) {
+    await oturumaYaz({ cevapsiz: true });
     console.error(`cevap yok: ${sonuc.hata} ${JSON.stringify(sonuc.denemeler)}`);
     // Yayında ziyaretçi iç ayrıntı görmez ("İletişim adresi ayarlanmadı." gibi): genel cümle gider.
     return json(gelistirme ? { hata: sonuc.hata, denemeler: sonuc.denemeler } : { hata: GENEL_HATA }, sonuc.durum, cors);
   }
 
-  const sonMesaj = mesajlar[mesajlar.length - 1].content;
   // İşverenin, ikizin sorularına cevabı (Y): ziyaretçiye "kaydettim" ancak kayıt gerçekten açıldıysa denir, bu yüzden
   // beklenir. Düşerse dürüst cümle gider ve sayfa e-posta bağlantısını açar. Sınav isteği kayıt açmaz.
   if (sonuc.isverenCevabi && !sinav) {
@@ -271,6 +301,7 @@ export async function istegiIsle(istek, env, ctx) {
     if (ctx?.waitUntil) ctx.waitUntil(kayit);
     else await kayit;
   }
+  await oturumaYaz({ cevap: sonuc.cevap, tur: sonuc.tur, saglayici: sonuc.saglayici });
   const yanit = { cevap: sonuc.cevap, iletildi: sonuc.iletildi };
   if (!sinav && env.IMZA_SIRRI) yanit.imza = await cevapImzasi(env.IMZA_SIRRI, oturum, sonuc.cevap);
   if (yeniJeton) yanit.oturum = yeniJeton;

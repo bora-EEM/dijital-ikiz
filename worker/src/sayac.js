@@ -6,6 +6,9 @@
 // İstatistik (Bora'nın isteği 2026-10-19): günlük isimsiz toplamlar "ist:<gün>" anahtarında, gün değişince silinmez,
 // 180 gün tutulur. Kişi, IP ya da soru metni yazılmaz. Tekil sayım yalnız bot doğrulamasından geçmiş sohbette (izin);
 // doğrulamasız sayfa açılışı tek anahtara ve günlük tavanla yazılır: sayacı döven depo yazma sınırını tüketemesin.
+// Oturum kaydı (Bora'nın kararı 2026-10-21): bot doğrulamasından geçmiş her oturumun soruları ve cevapları "ot:<kimlik>"
+// anahtarında. Kimlik oturumun özetidir (IP değil); sorudaki e-posta ve telefon yazılmadan önce gizlenir (index.js).
+// Bora'nın bilgisayarı haftada bir alıp siler; alınmasa da 14 günü geçen kayıt gün değişiminde silinir.
 
 export const VARSAYILAN = {
   gunlukSoru: 400,     // bütün ziyaretçiler, gün başına (normal kullanım: gün başına birkaç İK sohbeti × 10–20 soru)
@@ -39,6 +42,11 @@ export function sinirlar(env = {}) {
 const bugun = () => new Date().toISOString().slice(0, 10);
 const IST_GUN = 180;
 const ACILIS_TAVANI = 1000; // havuz başına günlük; aşılınca sayılmaz, sayfa "≥" gösterir
+const OTURUM_GUN = 14;
+// Oturum başına en çok bu kadar soru-cevap (oturum soru sınırı günde 20; gece yarısını aşan oturum 40'a çıkabilir,
+// fazlası "kesik" sayılır, sayfada görünür). SQLite tabanlı Durable Object'te değer sınırı 2 MB, 30 kayıt ~160 KB.
+const OTURUM_MESAJ = 30;
+const SORU_UZUNLUK = 600, CEVAP_UZUNLUK = 2000;
 
 // yollar: ["soru"] ya da ["tur", "A"] biçiminde; ikincisi alt sayaç (tür, sağlayıcı, dil, sınır kodu).
 // Sayım hatası ziyaretçinin sorusunu düşürmez: günlüğe yazılır, geçilir.
@@ -65,8 +73,10 @@ async function gunuTazele(depo, gun) {
   const usd = await depo.get("usd");
   if (onceki && usd) await depo.put(`ist:${onceki}`, { ...((await depo.get(`ist:${onceki}`)) || {}), usd });
   const sinir = new Date(Date.parse(gun) - IST_GUN * 86_400_000).toISOString().slice(0, 10);
-  const eski = [...(await depo.list()).keys()].filter((a) => a !== "bilgi" && a !== "gun"
-    && (!a.startsWith("ist:") || a.slice(4) < sinir));
+  const otSinir = new Date(Date.parse(gun) - OTURUM_GUN * 86_400_000).toISOString();
+  const eski = [...(await depo.list()).entries()].filter(([a, d]) => a !== "bilgi" && a !== "gun"
+    && (!a.startsWith("ist:") || a.slice(4) < sinir)
+    && (!a.startsWith("ot:") || String(d?.son || "") < otSinir)).map(([a]) => a);
   // Durable Object deposu tek çağrıda en çok 128 anahtar siler (fazlası hata, ikiz gün boyu susardı; inceleme 2026-10-13).
   for (let i = 0; i < eski.length; i += 128) await depo.delete(eski.slice(i, i + 128));
   await depo.put("gun", gun);
@@ -126,6 +136,51 @@ export async function sayacIslem(depo, env, istek) {
         : [["tur", String(istek.tur || "?")], ["saglayici", String(istek.saglayici || "?")], ["dil", String(istek.dil || "?")]];
       await istArtir(depo, gun, yollar);
       return { tamam: true };
+    }
+    case "oturumYaz": {
+      // Bir soru-cevap oturumun kaydına eklenir. Kayıt hatası ziyaretçiyi etkilemez (çağıran yutar, günlüğe yazar).
+      if (!/^[0-9a-f]{16}$/.test(String(istek.kimlik || ""))) return { tamam: false, neden: "kimlik" };
+      const a = `ot:${istek.kimlik}`;
+      const zaman = String(istek.zaman || new Date().toISOString()).slice(0, 30);
+      const ot = (await depo.get(a)) || { kimlik: istek.kimlik, baslangic: zaman, davet: Boolean(istek.davet), mesajlar: [] };
+      if (ot.mesajlar.length >= OTURUM_MESAJ) {
+        ot.kesik = (ot.kesik || 0) + 1;
+        await depo.put(a, ot);
+        return { tamam: false, neden: "oturum dolu" };
+      }
+      ot.son = zaman;
+      if (istek.davet) ot.davet = true;
+      ot.mesajlar.push({
+        zaman,
+        soru: String(istek.soru || "").slice(0, SORU_UZUNLUK),
+        cevap: istek.cevapsiz ? null : String(istek.cevap || "").slice(0, CEVAP_UZUNLUK),
+        tur: istek.cevapsiz ? null : String(istek.tur || "?").slice(0, 4),
+        model: istek.cevapsiz ? null : String(istek.saglayici || "?").slice(0, 80),
+        dil: istek.dil === "en" ? "en" : "tr",
+      });
+      await depo.put(a, ot);
+      return { tamam: true };
+    }
+    case "oturumlar": {
+      // Bora'nın bilgisayarı saatte bir okur: 14 günü geçen kayıt burada da silinir (gün değişimini beklemez).
+      const otSinir = new Date(Date.now() - OTURUM_GUN * 86_400_000).toISOString();
+      const hepsi = [...(await depo.list({ prefix: "ot:" })).entries()].filter(([a]) => a.startsWith("ot:"));
+      const eski = hepsi.filter(([, d]) => String(d?.son || "") < otSinir).map(([a]) => a);
+      for (let i = 0; i < eski.length; i += 128) await depo.delete(eski.slice(i, i + 128));
+      const kalan = hepsi.filter(([a]) => !eski.includes(a)).map(([, d]) => d);
+      return { oturumlar: kalan.sort((x, y) => (x.baslangic < y.baslangic ? 1 : -1)) };
+    }
+    case "oturumSil": {
+      // Bora'nın bilgisayarı kendi arşivine yazıp geri okuduktan sonra siler; yalnız "ot:" anahtarları silinebilir.
+      // Karşılaştır-sil: kayıt arşivlenen hâlinden sonra büyüdüyse (son değişti) silinmez, bir sonraki arşive kalır.
+      const silinecek = [];
+      for (const k of Array.isArray(istek.kayitlar) ? istek.kayitlar : []) {
+        if (!/^[0-9a-f]{16}$/.test(String(k?.kimlik))) continue;
+        const d = await depo.get(`ot:${k.kimlik}`);
+        if (d && d.son === k.son) silinecek.push(`ot:${k.kimlik}`);
+      }
+      for (let i = 0; i < silinecek.length; i += 128) await depo.delete(silinecek.slice(i, i + 128));
+      return { silinen: silinecek.length };
     }
     case "istatistik": {
       const gunler = [...(await depo.list({ prefix: "ist:" })).entries()].filter(([a]) => a.startsWith("ist:"))

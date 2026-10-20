@@ -2,6 +2,28 @@
 // Yalnız Web standartları (crypto.subtle, fetch); Workers'ta da Node'da da çalışır.
 
 // IPv6'da adres değiştirmek bedava (tek makinenin /64 bloğunda sayısız adres var): sınır /64 önekine uygulanır.
+// Oturum kaydına giden metinde e-posta adresi ve telefon numarası gizlenir (Bora'nın kararı 2026-10-21: kişisel bilgi
+// tutulmaz). Telefon Türkiye'nin 3-3-2-2 yapısıyla aranır (başında +90, 0090, 90 ya da 0 olabilir; araları boşluk, tire,
+// nokta, parantez); iki ucu rakam sınırlı, ardından gelen saat ya da tarih eşleşmeyi bozmaz. izinli: gizlenmeyecek
+// adresler (ikizin kendi verdiği iletişim adresi).
+const GIZLI_TELEFON = /(?<!\d)(?:(?:\+\s*|00)?90[\s.-]*)?(?:0[\s.-]*)?\(?[2-5]\d{2}\)?[\s.-]*\d{3}[\s.-]*\d{2}[\s.-]*\d{2}(?!\d)/g;
+const GIZLI_EPOSTA = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}/gu;
+export function kisiselBilgiyiGizle(metin, izinli = []) {
+  const izin = new Set(izinli.filter(Boolean).map((e) => String(e).toLowerCase()));
+  return String(metin || "")
+    .replace(GIZLI_EPOSTA, (e) => (izin.has(e.toLowerCase()) ? e : "[e-posta]"))
+    .replace(GIZLI_TELEFON, "[telefon]");
+}
+
+// Oturum kaydının anahtarı: oturum kimliğinin imza sırrıyla özeti (16 onaltılık hane). Kayıttan oturum jetonuna ya da
+// yerel "ip-<adres>" oturumunun adresine sırrı bilmeden geri gidilemez.
+export async function oturumKayitKimligi(oturum, sir = "") {
+  const ozet = sir ? await hmac(sir, `oturum-kaydi\n${oturum}`)
+    : [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`oturum-kaydi\n${oturum}`)))]
+      .map((b) => b.toString(16).padStart(2, "0")).join("");
+  return ozet.replace(/[^0-9a-f]/g, "").slice(0, 16).padEnd(16, "0");
+}
+
 export function ipAnahtari(ip) {
   if (!ip || !ip.includes(":")) return ip || "yok";
   const [bas, son = ""] = ip.toLowerCase().split("::");
