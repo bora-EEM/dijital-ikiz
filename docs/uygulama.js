@@ -40,7 +40,6 @@ const METIN = {
     kopyalandi: "Kopyalandı",
     kopyalanamadi: "Kopyalanamadı; adres seçili, Ctrl+C ile kopyalayın",
     gmail: "Gmail'de yaz",
-    uygulama: "E-posta uygulamasında aç",
     hata: "Şu an cevap veremiyorum, birazdan tekrar deneyin.",
     hiz: "Çok hızlı soruyorsunuz; bir dakika sonra tekrar deneyin.",
     oturum: "Bu oturumdaki soru sınırına geldiniz. Devamı için bana e-postayla yazabilirsiniz.",
@@ -62,7 +61,6 @@ const METIN = {
     kopyalandi: "Copied",
     kopyalanamadi: "Couldn't copy; the address is selected, press Ctrl+C",
     gmail: "Write in Gmail",
-    uygulama: "Open in mail app",
     hata: "I can't answer right now, please try again in a moment.",
     hiz: "You're asking a bit fast; please try again in a minute.",
     oturum: "You've reached this session's question limit. Feel free to email me to continue.",
@@ -106,8 +104,8 @@ function balon(sinif, metin) {
 }
 
 // Yalnız mailto bağlantısı, bilgisayarında e-posta programı kurulu olmayanlarda (Gmail'i tarayıcıda kullananlar)
-// basınca hiçbir şey yapmıyordu (Bora, 2026-10-21). Artık düğme bir kutu açar: adres, kopyala, Gmail'de yaz ve
-// e-posta uygulaması; hangisi işine yarıyorsa.
+// basınca hiçbir şey yapmıyordu (Bora, 2026-10-21). Artık düğme bir kutu açar: adres, kopyala ve Gmail'de yaz;
+// mailto seçeneği de Bora'da çalışmadığı için kaldırıldı.
 function epostaKutusu(soru) {
   const kutu = document.createElement("div");
   kutu.className = "eposta-kutu";
@@ -140,11 +138,7 @@ function epostaKutusu(soru) {
   gmail.target = "_blank"; gmail.rel = "noopener";
   gmail.dataset.m = "gmail";
   gmail.textContent = METIN[dil].gmail;
-  const uygulama = document.createElement("a");
-  uygulama.href = `mailto:${alici}?subject=${konu}&body=${govde}`;
-  uygulama.dataset.m = "uygulama";
-  uygulama.textContent = METIN[dil].uygulama;
-  kutu.append(adres, kopya, gmail, uygulama);
+  kutu.append(adres, kopya, gmail);
   return kutu;
 }
 
@@ -301,7 +295,7 @@ function adresiAl(tekrar = false) {
   return fetch(ILETISIM, { signal: AbortSignal.timeout(5000), headers: basliklar }).then((y) => (y.ok ? y.json() : null)).then((v) => {
     if (!v || typeof v.eposta !== "string" || !v.eposta.includes("@")) return;
     EPOSTA = v.eposta;
-    $("eposta").href = "mailto:" + EPOSTA;
+    $("eposta").href = "#";
     $("eposta").hidden = false;
     $("eposta").setAttribute("role", "button");
     $("eposta").setAttribute("aria-expanded", "false");
