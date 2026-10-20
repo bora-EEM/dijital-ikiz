@@ -36,6 +36,11 @@ const METIN = {
     eposta: "E-posta",
     ilet: "Bora'ya e-postayla sor",
     iletKonu: "Dijital ikizinden bir soru",
+    kopyala: "Adresi kopyala",
+    kopyalandi: "Kopyalandı",
+    kopyalanamadi: "Kopyalanamadı; adres seçili, Ctrl+C ile kopyalayın",
+    gmail: "Gmail'de yaz",
+    uygulama: "E-posta uygulamasında aç",
     hata: "Şu an cevap veremiyorum, birazdan tekrar deneyin.",
     hiz: "Çok hızlı soruyorsunuz; bir dakika sonra tekrar deneyin.",
     oturum: "Bu oturumdaki soru sınırına geldiniz. Devamı için bana e-postayla yazabilirsiniz.",
@@ -53,6 +58,11 @@ const METIN = {
     eposta: "Email",
     ilet: "Ask Bora by email",
     iletKonu: "A question from your digital twin",
+    kopyala: "Copy address",
+    kopyalandi: "Copied",
+    kopyalanamadi: "Couldn't copy; the address is selected, press Ctrl+C",
+    gmail: "Write in Gmail",
+    uygulama: "Open in mail app",
     hata: "I can't answer right now, please try again in a moment.",
     hiz: "You're asking a bit fast; please try again in a minute.",
     oturum: "You've reached this session's question limit. Feel free to email me to continue.",
@@ -95,17 +105,71 @@ function balon(sinif, metin) {
   return d;
 }
 
-// Bağlantının yeri hemen ayrılır (cevabın hemen altı): adres sonradan gelirse sıradaki sorunun altına düşmesin.
+// Yalnız mailto bağlantısı, bilgisayarında e-posta programı kurulu olmayanlarda (Gmail'i tarayıcıda kullananlar)
+// basınca hiçbir şey yapmıyordu (Bora, 2026-10-21). Artık düğme bir kutu açar: adres, kopyala, Gmail'de yaz ve
+// e-posta uygulaması; hangisi işine yarıyorsa.
+function epostaKutusu(soru) {
+  const kutu = document.createElement("div");
+  kutu.className = "eposta-kutu";
+  const adres = document.createElement("span");
+  adres.className = "adres";
+  adres.textContent = EPOSTA;
+  const kopya = document.createElement("button");
+  kopya.type = "button";
+  kopya.dataset.m = "kopyala";
+  kopya.textContent = METIN[dil].kopyala;
+  let zaman = null;
+  kopya.onclick = async () => {
+    let oldu = false;
+    try { await navigator.clipboard.writeText(EPOSTA); oldu = true; }
+    catch {
+      // Pano izni yoksa adres seçilir ve eski yolla kopyalanır; o da olmazsa seçili kalır, ziyaretçiye söylenir.
+      const secim = getSelection(); const aralik = document.createRange();
+      aralik.selectNodeContents(adres); secim.removeAllRanges(); secim.addRange(aralik);
+      try { oldu = document.execCommand("copy"); } catch { oldu = false; }
+    }
+    kopya.textContent = METIN[dil][oldu ? "kopyalandi" : "kopyalanamadi"];
+    clearTimeout(zaman);
+    zaman = setTimeout(() => (kopya.textContent = METIN[dil].kopyala), oldu ? 1500 : 4000);
+  };
+  const konu = encodeURIComponent(METIN[dil].iletKonu);
+  const govde = encodeURIComponent(soru ? soru + "\n\n" : "");
+  const alici = encodeURIComponent(EPOSTA).replace("%40", "@");
+  const gmail = document.createElement("a");
+  gmail.href = `https://mail.google.com/mail/?view=cm&fs=1&to=${alici}&su=${konu}&body=${govde}`;
+  gmail.target = "_blank"; gmail.rel = "noopener";
+  gmail.dataset.m = "gmail";
+  gmail.textContent = METIN[dil].gmail;
+  const uygulama = document.createElement("a");
+  uygulama.href = `mailto:${alici}?subject=${konu}&body=${govde}`;
+  uygulama.dataset.m = "uygulama";
+  uygulama.textContent = METIN[dil].uygulama;
+  kutu.append(adres, kopya, gmail, uygulama);
+  return kutu;
+}
+
+// Basınca kutuyu açar, yeniden basınca kapatır. Kutu `yer`in hemen arkasına girer; durum düğmenin kendisine yazılır.
+function kutuyuAcKapa(dugme, soru, yer = dugme) {
+  const acik = yer.nextElementSibling;
+  if (acik && acik.classList.contains("eposta-kutu")) { acik.remove(); dugme.setAttribute("aria-expanded", "false"); return; }
+  yer.after(epostaKutusu(soru));
+  dugme.setAttribute("aria-expanded", "true");
+}
+
+// Düğmenin yeri hemen ayrılır (cevabın hemen altı): adres sonradan gelirse sıradaki sorunun altına düşmesin.
 async function iletBaglantisi(soru, cevapBalonu) {
-  const a = document.createElement("a");
-  a.className = "ilet";
-  a.hidden = true;
-  cevapBalonu.after(a);
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "ilet";
+  b.hidden = true;
+  cevapBalonu.after(b);
   if (!EPOSTA) await adresiAl(true); // ilk istek düştüyse bir kez daha (sayılmaz)
-  if (!EPOSTA) { a.remove(); return; }
-  a.textContent = METIN[dil].ilet;
-  a.href = `mailto:${EPOSTA}?subject=${encodeURIComponent(METIN[dil].iletKonu)}&body=${encodeURIComponent(soru + "\n\n")}`;
-  a.hidden = false;
+  if (!EPOSTA) { b.remove(); return; }
+  b.dataset.m = "ilet";
+  b.textContent = METIN[dil].ilet;
+  b.setAttribute("aria-expanded", "false");
+  b.onclick = () => kutuyuAcKapa(b, soru);
+  b.hidden = false;
 }
 
 // --- Bot doğrulaması: ilk soruda (ve oturum düşünce) görünmez Turnstile jetonu alınır ------------------------
@@ -239,6 +303,9 @@ function adresiAl(tekrar = false) {
     EPOSTA = v.eposta;
     $("eposta").href = "mailto:" + EPOSTA;
     $("eposta").hidden = false;
+    $("eposta").setAttribute("role", "button");
+    $("eposta").setAttribute("aria-expanded", "false");
+    $("eposta").onclick = (e) => { e.preventDefault(); kutuyuAcKapa($("eposta"), "", $("eposta").closest(".not")); };
   }).catch(() => {});
 }
 adresiAl();

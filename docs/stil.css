@@ -43,6 +43,15 @@ main { flex: 1; display: flex; flex-direction: column; gap: 14px; padding: 8px 0
 .ilet { align-self: flex-start; margin-top: -6px; font-size: 14px; color: var(--vurgu); text-decoration: none;
         border: 1px solid var(--vurgu-koyu); border-radius: 999px; padding: 6px 14px; }
 .ilet:hover { background: var(--vurgu-koyu); }
+button.ilet { font: inherit; font-size: 14px; background: none; cursor: pointer; }
+.eposta-kutu { align-self: flex-start; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%;
+               background: var(--kart); border: 1px solid var(--kenar); border-radius: 14px; padding: 10px 12px; font-size: 14px; }
+.eposta-kutu .adres { color: var(--metin); user-select: all; overflow-wrap: anywhere; margin-right: 4px; }
+.eposta-kutu button, .eposta-kutu a { font: inherit; font-size: 13px; color: var(--vurgu); background: none; text-decoration: none;
+               border: 1px solid var(--vurgu-koyu); border-radius: 999px; padding: 4px 12px; cursor: pointer; margin: 0; }
+.eposta-kutu button:hover, .eposta-kutu a:hover { background: var(--vurgu-koyu); }
+footer .eposta-kutu { margin-top: 10px; }
+@media (max-width: 480px) { .eposta-kutu button, .eposta-kutu a { padding: 8px 12px; } }
 .yaziyor { display: inline-flex; gap: 5px; }
 .yaziyor i { width: 7px; height: 7px; border-radius: 50%; background: var(--soluk); animation: zipla 1s infinite ease-in-out; }
 .yaziyor i:nth-child(2) { animation-delay: .15s; } .yaziyor i:nth-child(3) { animation-delay: .3s; }
