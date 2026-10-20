@@ -27,7 +27,7 @@ const ZAMAN_ASIMI_MS = 35000;
 
 const METIN = {
   tr: {
-    rozet: "Yapay zekâ ikizi",
+    rozet: "Dijital ikiz",
     alt: "Bana ne sormak isterseniz sorun; ikizim benim yerime, benim onayladığım bilgilerle cevaplar.",
     yer: "Bir soru yazın…",
     oneriler: ["Hangi projeleri yaptın?", "Ne zaman ve nerede staj yapabilirsin?", "Yapay zekâyı işinde nasıl kullanıyorsun?"],
@@ -48,7 +48,7 @@ const METIN = {
     dogrulama: "Tarayıcı doğrulaması tamamlanamadı. Sayfayı yenileyip tekrar deneyin.",
   },
   en: {
-    rozet: "AI twin",
+    rozet: "Digital twin",
     alt: "Ask me anything; my twin answers on my behalf, using only information I have approved.",
     yer: "Type a question…",
     oneriler: ["What projects have you built?", "When and where can you do your internship?", "How do you use AI in your work?"],

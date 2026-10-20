@@ -1,7 +1,7 @@
 # Bora Koruyucu — dijital ikiz
 
 İşverenlerin bana soracağı soruları benim yerime, benim ağzımdan ve **yalnız benim onayladığım bilgilerle** cevaplayan
-bir yapay zekâ ikizi. Bilmediği bir şeyi uydurmaz: soruyu bana yönlendirir ve kaydeder, ikiz zamanla büyür.
+bir dijital ikiz. Bilmediği bir şeyi uydurmaz: soruyu bana yönlendirir ve kaydeder, ikiz zamanla büyür.
 
 **Canlı:** _yayından sonra eklenecek_
 
