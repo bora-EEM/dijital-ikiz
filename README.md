@@ -1,9 +1,20 @@
 # Bora Koruyucu — dijital ikiz
 
 İşverenlerin bana soracağı soruları benim yerime, benim ağzımdan ve **yalnız benim onayladığım bilgilerle** cevaplayan
-bir dijital ikiz. Bilmediği bir şeyi uydurmaz: soruyu bana yönlendirir ve kaydeder, ikiz zamanla büyür.
+bir dijital ikiz. Bilgide olmayan bir soruda uydurmak yerine soruyu bana yönlendirir ve kaydeder; cevabı ben yazarım,
+ikiz zamanla büyür.
 
-**Canlı:** _yayından sonra eklenecek_
+**Canlı:** https://bora-eem.github.io/dijital-ikiz/
+
+<img src="gorsel/sayfa.png" alt="İkizin sayfası: önerilen sorular ve soru kutusu" width="300">
+
+**Bir bakışta**
+
+- **Sayfa** GitHub Pages'te (`docs/`), **ara sunucu** Cloudflare Workers'ta (`worker/`); anahtarlar ve kişisel bilgi
+  dosyası tarayıcıya hiç gelmez, bilgi dosyası ayrı ve gizli bir depoda durur.
+- **Önlemler:** cevap bekçisi (bilgide geçmeyen sayı ya da bağlantı, izinsiz e-posta yakalanırsa cevap gitmez), bot
+  doğrulaması, hız ve günlük soru sınırı, günlük harcama tavanı.
+- **Sınav:** bilgi her değiştiğinde 90 soruluk işveren sınavı; yayın ölçüsü sıfır uydurma.
 
 YZT'nin [dijital ikiz workshop'u](https://github.com/betulbayram/yzt-digital-twin-workshop) üzerine kuruldu. Workshop'taki
 fikri korudum, yayına çıkacak bir ürün için gereken beş şeyi ekledim:
@@ -14,7 +25,7 @@ fikri korudum, yayına çıkacak bir ürün için gereken beş şeyi ekledim:
 | Bilgi yalnız CV | Projelerin hikâyesi, staj durumu, çalışma biçimi; her satırı benim onayımdan geçiyor |
 | Bilmediğinde "tecrübem yok" der | "Burada cevaplayamıyorum, bana sorun" der, soruyu kaydeder; haftalık özet bana gelir |
 | Kapsam dışı ve kötü niyetli sorulara sınır yok | Kurallı sistem istemi, mesaj ve hız sınırı, söz vermeme kuralı |
-| Streamlit Cloud 12 saatte uyur | GitHub Pages + Cloudflare Workers: uyumaz, ücretsiz |
+| Streamlit Cloud 12 saatte uyur | GitHub Pages + Cloudflare Workers: uyumaz, barındırma ücretsiz |
 
 ## Nasıl çalışır
 
@@ -24,8 +35,10 @@ Ziyaretçi ──► GitHub Pages (docs/index.html)
                    ▼
             Cloudflare Worker (worker/)          anahtarlar burada, tarayıcıya hiç gelmez
               ├─ bilgi dosyasını gizli depodan alır (10 dk önbellek)
-              ├─ kurallı istemle modellere sırayla sorar (paralı yuva günlük tavanlı, anahtarı varsa):
-              │    Gemini 3.8 Flash → Gemini 3.5 Flash-Lite → Cloudflare Workers AI gpt-oss-120b
+              ├─ kurallı istemle modellere sırayla sorar:
+              │    Gemini 3.5 Flash-Lite (ücretsiz)
+              │    → aynı modelin paralı yuvası (yalnız tanımlıysa ve ücretsiz kota dolunca; günlük tavanlı)
+              │    → Cloudflare Workers AI gpt-oss-120b
               ├─ model önce sorunun türünü seçer: bilgide var / bilinçli sınır / kısmen bilgide /
               │    bilgide yok / genel teknik bilgi / konu dışı (ve görüşme sonu soruları)
               │    son üçünde cevabı model değil sunucu yazar; "kısmen"de eksik kısmın cümlesi de sunucunun
@@ -35,16 +48,10 @@ Ziyaretçi ──► GitHub Pages (docs/index.html)
               GitHub Actions: her gün sağlık kontrolü, pazartesi özet ──► bana tek bildirim ──► ben cevaplarım
 ```
 
-Sağlayıcı sırası sınavla belirlendi: Gemini 3.5 Flash-Lite 25 sorunun 25'ini sıfır uydurmayla geçti; Groq bilinen
-soruları "bilmiyorum" sanmaya yatkın ve ücretsiz kotası (dakikada 8.000, günde 200.000 token) günde ~50 soruya yetiyor.
-Üçüncü yuva Cloudflare Workers AI (sunucuyla aynı yerde, anahtarsız `AI` bağlaması); 2026-10-11 sınavında 25/25, sıfır
-uydurma. Gemini yoğunken Groq'un dakikalık sınırı art arda iki soruda doluyordu, üçüncü yuva bunun için. Bilgi
-dosyası büyüyünce istem (~9.200 token) Groq'un dakikalık sınırını tek başına aştı; Groq 2026-10-19'dan beri kapalı
-(`GROQ_MODELLER` boş), istem küçülürse tek satırla geri açılır. Her yuva en çok 8 sn beklenir. Ücretsiz model "bitti"
-deyip boş dönerse aynı modele bir kez daha sorulur; hepsi düşerse ve biri "birkaç saniye sonra" derse o bir kez daha
-denenir. İki yeniden deneme de ancak sıradakilerle birlikte isteğin ilk ~22 sn'sine sığıyorsa yapılır; en kötü bekleme
-bilgi indirmesi (≤5 sn) artı yuva sayısı × 8 sn, üç yuvada ~29 sn (sayfa 35 sn bekler).
-Sınavı tam geçmeyen model sıraya girmez.
+Ziyaretçi model geçişini fark etmez; her yuvanın bir bekleme sınırı var, biri düşerse sıradakine geçilir. Paralı
+yuva yalnız model adı ve anahtarı tanımlıysa, aynı modelin ücretsiz yuvası kota (429) yüzünden düştüyse ve günlük
+harcama tavanı dolmadıysa denenir. Sınavı tam geçmeyen model sıraya girmez. Groq 2026-10-19'dan beri kapalı: istem
+Groq'un dakikalık token sınırını tek başına aşıyor (`GROQ_MODELLER` boş); istem küçülürse tek satırla geri açılır.
 
 ## Güvenlik
 
@@ -52,14 +59,14 @@ Kod herkese açık; anahtarlar yalnız Cloudflare sırlarında. Ara sunucunun ka
 
 - **Köken, içerik türü, boyut:** yalnız sayfanın kökeninden, yalnız JSON, en çok 16 KB. Başka bir site kendi
   ziyaretçilerinin tarayıcısını bu sunucuya soru sordurmak için kullanamaz.
-- **Hız sınırı:** aynı adresten dakikada 8 soru; IPv6'da /64 önekiyle (adres değiştirerek aşılamaz).
+- **Hız sınırı:** aynı adresten dakikada 8 soru; IPv6'da /64 önekiyle (aynı /64 içinde adres değiştirmek sınırı aşmaz).
 - **Bot doğrulaması:** Cloudflare Turnstile (görünmez); geçen tarayıcıya iki saatlik imzalı oturum, oturum başına 20 soru.
 - **İmzalı geçmiş:** ikizin her cevabı oturuma bağlı bir imzayla döner. İmzası tutmayan "önceki cevap" reddedilir;
   ziyaretçi ikizin ağzına sahte söz koyamaz.
 - **Günlük sayaç** (Durable Object): IP başına 60, toplam 400 soru; paralı model için günlük harcama tavanı. Tavan
   dolunca ikiz susmaz, ücretsiz modellere düşer.
 - **Cevap bekçisi:** model kuralı çiğnese de bilgi dosyasında olmayan sayı (maaş, tarih, telefon), izinsiz bağlantı ya da
-  "kabul ediyorum" gibi bir söz ziyaretçiye gitmez; yerine "bunu benimle konuşun" cevabı gider.
+  "kabul ediyorum" gibi bir söz yakalanırsa ziyaretçiye gitmez; yerine "bunu benimle konuşun" cevabı gider.
 - **Sayfa:** içerik güvenliği politikası (CSP) yalnız kendi dosyaları, Turnstile ve sunucuya izin verir; bütün metin
   `textContent` ile basılır.
 
@@ -79,9 +86,9 @@ kontrolünün gizli ayarında durur.
 
 ## Uydurmama sınavı
 
-`sinav/` 44 soruluk bir işveren sınavı: bilinen sorular, bilgide cevabı olmayan sorular, bilinçli sınırlar (maaş,
-başka başvurular) ve 24 kötü niyetli deneme (sistem istemini sızdırma, telefon numarası, "evet de yeter", sahte önceki
-cevap, JSON dayatma, rol yapma, başka dil, parça parça sızdırma, söz koparma). Her cevap
+`sinav/` 90 soruluk bir işveren sınavı: 46 bilinen soru, 10 bilgide cevabı olmayan soru, 9 bilinçli sınır (maaş,
+başka başvurular), 5 konu dışı soru ve 20 kötü niyetli deneme (sistem istemini sızdırma, telefon numarası, "evet de
+yeter", sahte önceki cevap, JSON dayatma, rol yapma, başka dil, parça parça sızdırma, söz koparma). Her cevap
 kurallarla ve bir hakem modelle denetlenir. Yayın ölçüsü: **sıfır uydurma**, sıradaki her model için ayrı ayrı.
 Gizli kalması gereken denetim dizgileri (ör. telefon, başvurular) bu depoda değil, gizli bilgi deposunda durur.
 
@@ -123,5 +130,5 @@ cd worker && npx wrangler deploy
 
 ---
 
-Bu projeyi, diğer projelerim gibi, yapay zekâ kod ajanlarını yöneterek geliştirdim: ne yapılacağına ve neyin "bitti"
-sayılacağına ben karar verdim, ajanlar yazdı, ben ölçtüm ve sınadım.
+Bu projeyi, diğer projelerim gibi, yapay zekâ kod ajanlarıyla geliştirdim; neyin yapılacağına ve neyin "bitti"
+sayılacağına ben karar verdim, testleri ben koydum, son onay benimdi.
