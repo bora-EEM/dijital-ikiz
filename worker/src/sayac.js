@@ -9,6 +9,10 @@
 // Oturum kaydı (Bora'nın kararı 2026-10-21): bot doğrulamasından geçmiş her oturumun soruları ve cevapları "ot:<kimlik>"
 // anahtarında. Kimlik oturumun özetidir (IP değil); sorudaki e-posta ve telefon yazılmadan önce gizlenir (index.js).
 // Bora'nın bilgisayarı haftada bir alıp siler; alınmasa da 14 günü geçen kayıt gün değişiminde silinir.
+// Açılış kaydı (Bora'nın kararı 2026-10-26, "en etik yoldan"): her sayfa açılışı "ac:<kimlik>" anahtarında; kimlik
+// sayfanın o açılış için ürettiği rastgele sayıdır (çerez yok, iki ziyaret birbirine bağlanamaz). Yalnız dakika, ülke,
+// internetin geldiği kurum (şirket ağı ya da internet sağlayıcısı), cihaz türü, dil, robot olabilir mi, kalma süresi, soru sayısı ve sayfada yaşanan sorunlar
+// (bot doğrulaması yüklenmedi, sunucuya ulaşılamadı). IP, tarayıcı kimliği ve adres yolu yazılmaz; 14 günde silinir.
 
 export const VARSAYILAN = {
   gunlukSoru: 400,     // bütün ziyaretçiler, gün başına (normal kullanım: gün başına birkaç İK sohbeti × 10–20 soru)
@@ -47,6 +51,35 @@ const OTURUM_GUN = 14;
 // fazlası "kesik" sayılır, sayfada görünür). SQLite tabanlı Durable Object'te değer sınırı 2 MB, 30 kayıt ~160 KB.
 const OTURUM_MESAJ = 30;
 const SORU_UZUNLUK = 600, CEVAP_UZUNLUK = 2000;
+// Açılış başına en çok bu kadar sorun kaydı; olay adları sabit listeden, ayrıntı kısa kod.
+const ACILIS_OLAY = 12;
+const OLAYLAR = new Set(["dogrulama", "dogrulamaSunucu", "ag", "sunucu", "sinir", "iletisim"]);
+const kimlikMi = (k) => /^[0-9a-f]{16}$/.test(String(k || ""));
+const dakika = () => new Date().toISOString().slice(0, 16) + ":00.000Z";
+
+// Sorun ucundan (sayfanın ilk isteği düştüyse) açılan kayıt için ayrı, küçük tavan: o uç doğrulamasız, rastgele
+// kimliklerle dövülse de gün içinde en çok bu kadar kayıt açar; sayfa açılışından gelen kayıtlar ziyaret tavanına
+// bağlı (havuz başına 1000) ve bundan etkilenmez. Normal günde ilk isteği düşen açılış birkaç tanedir.
+const SORUNDAN_KAYIT = 200;
+
+// Açılışın kaydı yoksa açılır. "tavan" verilirse o sayaçla sınırlı; verilmezse (sunucunun kendi gözlemi) yalnız var olan
+// kayda yazılır, yeni kayıt açılmaz.
+async function acilisKaydi(depo, gun, kimlik, bilgi, tavan = null) {
+  const a = `ac:${kimlik}`;
+  const onceki = await depo.get(a);
+  if (onceki || !tavan) return onceki || null;
+  const ist = (await depo.get(`ist:${gun}`)) || {};
+  if ((ist[tavan.sayac] || 0) >= tavan.sinir) return null;
+  await istArtir(depo, gun, [[tavan.sayac]]);
+  const b = bilgi || {};
+  const kayit = {
+    kimlik, zaman: dakika(), davet: Boolean(b.davet),
+    kurum: String(b.kurum || "").slice(0, 80), ulke: String(b.ulke || "").slice(0, 2), cihaz: String(b.cihaz || "").slice(0, 12),
+    dil: String(b.dil || "").slice(0, 3), robot: Boolean(b.robot), soru: 0, olaylar: [],
+  };
+  await depo.put(a, kayit);
+  return kayit;
+}
 
 // yollar: ["soru"] ya da ["tur", "A"] biçiminde; ikincisi alt sayaç (tür, sağlayıcı, dil, sınır kodu).
 // Sayım hatası ziyaretçinin sorusunu düşürmez: günlüğe yazılır, geçilir.
@@ -76,7 +109,8 @@ async function gunuTazele(depo, gun) {
   const otSinir = new Date(Date.parse(gun) - OTURUM_GUN * 86_400_000).toISOString();
   const eski = [...(await depo.list()).entries()].filter(([a, d]) => a !== "bilgi" && a !== "gun"
     && (!a.startsWith("ist:") || a.slice(4) < sinir)
-    && (!a.startsWith("ot:") || String(d?.son || "") < otSinir)).map(([a]) => a);
+    && (!a.startsWith("ot:") || String(d?.son || "") < otSinir)
+    && (!a.startsWith("ac:") || String(d?.zaman || "") < otSinir)).map(([a]) => a);
   // Durable Object deposu tek çağrıda en çok 128 anahtar siler (fazlası hata, ikiz gün boyu susardı; inceleme 2026-10-13).
   for (let i = 0; i < eski.length; i += 128) await depo.delete(eski.slice(i, i + 128));
   await depo.put("gun", gun);
@@ -128,7 +162,39 @@ export async function sayacIslem(depo, env, istek) {
       const ist = (await depo.get(`ist:${gun}`)) || {};
       if ((ist[`ziyaret${ek}`] || 0) >= ACILIS_TAVANI) return { tamam: true, tavan: true };
       await istArtir(depo, gun, [[`ziyaret${ek}`]]);
+      // Ziyaretçi izlenmek istemediğini söylediyse (GPC, DNT) sayfa kimlik göndermez: yalnız toplam artar.
+      if (kimlikMi(istek.acilis?.kimlik)) {
+        await acilisKaydi(depo, gun, istek.acilis.kimlik, { ...istek.acilis, davet: istek.davet }, { sayac: "acilisKaydi", sinir: Infinity });
+      }
       return { tamam: true };
+    }
+    case "acilisOlay": {
+      // Sayfadan gelen sorun kaydı ya da kalma süresi. Kayıt hatası ziyaretçiyi etkilemez (sayfa cevabı okumaz).
+      if (!kimlikMi(istek.kimlik)) return { tamam: false, neden: "kimlik" };
+      // Sayfadan gelen olay kaydı açabilir (ilk istek düştüyse), sunucunun kendi gözlemi açamaz (bilgi yok).
+      const ac = await acilisKaydi(depo, gun, istek.kimlik, istek.bilgi,
+        istek.bilgi ? { sayac: "acilisKaydiSorundan", sinir: SORUNDAN_KAYIT } : null);
+      if (!ac) return { tamam: false, neden: istek.bilgi ? "tavan" : "kayit yok" };
+      if (istek.olay === "ayrildi") {
+        // Kalma süresi saniye, en çok bir gün; sekme her gizlendiğinde gelir, en büyüğü kalır.
+        const sure = Math.min(86_400, Math.max(0, Math.round(Number(istek.sure) || 0)));
+        if (sure > (ac.sure || 0)) { ac.sure = sure; await depo.put(`ac:${istek.kimlik}`, ac); }
+        return { tamam: true };
+      }
+      if (!OLAYLAR.has(istek.olay)) return { tamam: false, neden: "olay" };
+      if (ac.olaylar.length >= ACILIS_OLAY) return { tamam: false, neden: "dolu" };
+      ac.olaylar.push({ zaman: dakika(), olay: istek.olay, ayrinti: String(istek.ayrinti || "").replace(/[^a-z0-9-]/gi, "").slice(0, 40) });
+      await depo.put(`ac:${istek.kimlik}`, ac);
+      return { tamam: true };
+    }
+    case "acilislar": {
+      // Bora'nın bilgisayarı saatte bir okur; 14 günü geçen kayıt burada da silinir.
+      const sinir = new Date(Date.now() - OTURUM_GUN * 86_400_000).toISOString();
+      const hepsi = [...(await depo.list({ prefix: "ac:" })).entries()].filter(([a]) => a.startsWith("ac:"));
+      const eski = hepsi.filter(([, d]) => String(d?.zaman || "") < sinir).map(([a]) => a);
+      for (let i = 0; i < eski.length; i += 128) await depo.delete(eski.slice(i, i + 128));
+      const kalan = hepsi.filter(([a]) => !eski.includes(a)).map(([, d]) => d);
+      return { acilislar: kalan.sort((x, y) => (x.zaman < y.zaman ? 1 : -1)) };
     }
     case "sonuc": {
       // Cevabın türü, cevaplayan model ve dil; cevap verilemediyse "cevapsiz". Metin yazılmaz.
@@ -139,7 +205,7 @@ export async function sayacIslem(depo, env, istek) {
     }
     case "oturumYaz": {
       // Bir soru-cevap oturumun kaydına eklenir. Kayıt hatası ziyaretçiyi etkilemez (çağıran yutar, günlüğe yazar).
-      if (!/^[0-9a-f]{16}$/.test(String(istek.kimlik || ""))) return { tamam: false, neden: "kimlik" };
+      if (!kimlikMi(istek.kimlik)) return { tamam: false, neden: "kimlik" };
       const a = `ot:${istek.kimlik}`;
       const zaman = String(istek.zaman || new Date().toISOString()).slice(0, 30);
       const ot = (await depo.get(a)) || { kimlik: istek.kimlik, baslangic: zaman, davet: Boolean(istek.davet), mesajlar: [] };
@@ -150,6 +216,12 @@ export async function sayacIslem(depo, env, istek) {
       }
       ot.son = zaman;
       if (istek.davet) ot.davet = true;
+      // Soru, sorulduğu açılışa da yazılır: hangi açılış sohbete döndü (açılış kaydı yoksa ya da izin yoksa geçilir).
+      if (kimlikMi(istek.acilis)) {
+        const ac = await depo.get(`ac:${istek.acilis}`);
+        if (ac) { ac.soru = (ac.soru || 0) + 1; ac.oturum = istek.kimlik; await depo.put(`ac:${istek.acilis}`, ac); }
+        ot.acilis = istek.acilis;
+      }
       ot.mesajlar.push({
         zaman,
         soru: String(istek.soru || "").slice(0, SORU_UZUNLUK),

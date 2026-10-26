@@ -66,6 +66,17 @@ Kod herkese açık; anahtarlar yalnız Cloudflare sırlarında. Ara sunucunun ka
 Sınav ve günlük sağlık kontrolü kapıdan bir sınav anahtarıyla geçer; anahtar yalnız Cloudflare sırrında ve sağlık
 kontrolünün gizli ayarında durur.
 
+## Ne kaydedilir
+
+- **Sohbetler:** soru ve ikizin cevabı; içindeki e-posta adresi ve telefon kayda girmeden gizlenir. IP yok.
+- **Açılışlar:** dakika, ülke, internetin geldiği kurumun adı (şirket ağı ya da internet sağlayıcısı), cihaz türü
+  (telefon, bilgisayar), dil,
+  sayfada kalma süresi, sorulan soru sayısı ve ziyaretçinin yaşadığı sorun (ör. bot doğrulaması yüklenmedi, sunucuya
+  ulaşılamadı). Çerez, IP ve tarayıcı kimliği yok: her açılış yalnız o sayfanın belleğinde duran rastgele bir kimlik
+  alır, iki ziyaret birbirine bağlanamaz. Tarayıcısında "izlenmek istemiyorum" diyen ziyaretçi (Global Privacy Control,
+  Do Not Track) yalnız günlük toplama girer.
+- Kayıtlar sunucuda en geç 15 gün durur; sonra yalnız benim bilgisayarımdaki arşivde kalır, kimseyle paylaşılmaz.
+
 ## Uydurmama sınavı
 
 `sinav/` 44 soruluk bir işveren sınavı: bilinen sorular, bilgide cevabı olmayan sorular, bilinçli sınırlar (maaş,

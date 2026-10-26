@@ -18,6 +18,24 @@ const DAVET = (() => {
     return d || sessionStorage.getItem("davet") || "";
   } catch { return d || ""; }
 })().slice(0, 64);
+// Açılış kaydı (Bora'nın kararı 2026-10-26): bu açılışa rastgele bir kimlik, yalnız bu sayfanın belleğinde (çerez ve
+// tarayıcı deposu yok; iki ziyaret birbirine bağlanamaz). Ziyaretçi tarayıcısında "izlenmek istemiyorum" dediyse (GPC,
+// DNT) kimlik hiç üretilmez: açılış yalnız sayılır.
+const IZLEME_YOK = navigator.globalPrivacyControl === true || navigator.doNotTrack === "1" || window.doNotTrack === "1";
+const ACILIS = IZLEME_YOK || !window.crypto?.getRandomValues ? ""
+  : [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, "0")).join("");
+const OLAY = API.replace(/sohbet$/, "olay");
+// Kalma süresi yalnız sayfanın görünür olduğu süre (arka planda bekleyen sekme sayılmaz).
+let gorunurSure = 0, gorunurBas = document.visibilityState === "visible" ? Date.now() : null;
+// Sayfada yaşanan sorunu (bot doğrulaması yüklenmedi, sunucuya ulaşılamadı) ve kalma süresini açılışa yazar. Cevap
+// beklenmez; düşerse ziyaretçi hiçbir şey görmez.
+function olay(ad, ek = {}) {
+  if (!ACILIS) return;
+  const govde = JSON.stringify({ acilis: ACILIS, olay: ad, ...(DAVET ? { davet: DAVET } : {}), ...ek });
+  try { if (navigator.sendBeacon && navigator.sendBeacon(OLAY, govde)) return; } catch {}
+  fetch(OLAY, { method: "POST", body: govde, keepalive: true }).catch(() => {});
+}
+const dogrulamaHatasi = (ayrinti) => Object.assign(new Error("dogrulama"), { ayrinti });
 let EPOSTA = "";
 const LINKEDIN = "https://www.linkedin.com/in/bora-koruyucu-558a09260/";
 // Görünmez bot doğrulaması (Cloudflare Turnstile); site anahtarı herkese açıktır. Yerelde sunucu doğrulama istemez.
@@ -32,7 +50,7 @@ const METIN = {
     yer: "Bir soru yazın…",
     oneriler: ["Hangi projeleri yaptın?", "Ne zaman ve nerede staj yapabilirsin?", "Yapay zekâyı işinde nasıl kullanıyorsun?"],
     bilgiDugme: "Neler kaydedilir ⓘ",
-    bilgi: "Dijital ikizi geliştirmek için sohbetler kaydedilir.",
+    bilgi: "Dijital ikizi geliştirmek için sohbetler ve isimsiz ziyaret bilgileri kaydedilir.",
     eposta: "E-posta",
     ilet: "Bora'ya e-postayla sor",
     iletKonu: "Dijital ikizinden bir soru",
@@ -53,7 +71,7 @@ const METIN = {
     yer: "Type a question…",
     oneriler: ["What projects have you built?", "When and where can you do your internship?", "How do you use AI in your work?"],
     bilgiDugme: "What gets saved ⓘ",
-    bilgi: "Conversations are saved to improve the digital twin.",
+    bilgi: "Conversations and anonymous visit details are saved to improve the digital twin.",
     eposta: "Email",
     ilet: "Ask Bora by email",
     iletKonu: "A question from your digital twin",
@@ -175,7 +193,7 @@ function turnstileHazir(sinirMs = 10000) {
     const bas = Date.now();
     (function bak() {
       if (window.turnstile) return coz(window.turnstile);
-      if (Date.now() - bas > sinirMs) return ret(new Error("dogrulama"));
+      if (Date.now() - bas > sinirMs) return ret(dogrulamaHatasi("yuklenmedi"));
       setTimeout(bak, 100);
     })();
   });
@@ -184,7 +202,7 @@ function turnstileHazir(sinirMs = 10000) {
 // Doğrulama ne olursa olsun 30 sn'de sonuçlanır: sayfa "yazıyor"da asılı kalmasın.
 function dogrulamaAl() {
   if (!TURNSTILE_SITE) return Promise.resolve(null);
-  return Promise.race([dogrulamaBaslat(), new Promise((_, ret) => setTimeout(() => ret(new Error("dogrulama")), 30000))]);
+  return Promise.race([dogrulamaBaslat(), new Promise((_, ret) => setTimeout(() => ret(dogrulamaHatasi("zaman")), 30000))]);
 }
 
 async function dogrulamaBaslat() {
@@ -192,17 +210,18 @@ async function dogrulamaBaslat() {
   return new Promise((coz, ret) => {
     bekleyen = { coz, ret };
     if (widget === null) {
-      const basarisiz = () => { bekleyen?.ret(new Error("dogrulama")); bekleyen = null; };
+      // Turnstile hata kodunu verir (ör. 110200 alan adı, 300xxx tarayıcı); sorun kaydına kod olarak gider.
+      const basarisiz = (neden) => (kod) => { bekleyen?.ret(dogrulamaHatasi(kod ? `${neden}-${kod}` : neden)); bekleyen = null; };
       widget = ts.render("#dogrulama", {
         sitekey: TURNSTILE_SITE,
         execution: "execute",
         appearance: "interaction-only",
         language: dil,
         callback: (jeton) => { bekleyen?.coz(jeton); bekleyen = null; },
-        "error-callback": basarisiz,
-        "timeout-callback": basarisiz,
-        "expired-callback": basarisiz,
-        "unsupported-callback": basarisiz,
+        "error-callback": basarisiz("hata"),
+        "timeout-callback": basarisiz("zaman"),
+        "expired-callback": basarisiz("sure"),
+        "unsupported-callback": basarisiz("desteklenmiyor"),
       });
     } else {
       ts.reset(widget);
@@ -247,7 +266,8 @@ async function gonder(soru) {
   yaziyor.innerHTML = '<span class="yaziyor"><i></i><i></i><i></i></span>';
 
   try {
-    const govde = () => ({ mesajlar: gecmis.slice(-8), dil, ...(oturum ? { oturum } : {}), ...(DAVET ? { davet: DAVET } : {}) });
+    const govde = () => ({ mesajlar: gecmis.slice(-8), dil, ...(oturum ? { oturum } : {}), ...(DAVET ? { davet: DAVET } : {}),
+      ...(ACILIS ? { acilis: ACILIS } : {}) });
     let y;
     if (!oturum && TURNSTILE_SITE) y = await sunucuyaSor({ ...govde(), dogrulama: await dogrulamaAl() });
     else y = await sunucuyaSor(govde());
@@ -266,11 +286,19 @@ async function gonder(soru) {
     if (y.veri.oturum) oturum = y.veri.oturum;
     if (y.durum === 429) throw new Error(y.veri.kod || "hiz");
     if (y.durum === 401) throw new Error("dogrulama");
-    if (y.durum !== 200 || !y.veri.cevap) throw new Error("hata");
+    if (y.durum !== 200 || !y.veri.cevap) throw Object.assign(new Error("hata"), { durum: y.durum });
     yaziyor.textContent = y.veri.cevap;
     gecmis.push({ rol: "assistant", icerik: y.veri.cevap, ...(y.veri.imza ? { imza: y.veri.imza } : {}) });
     if (y.veri.iletildi) iletBaglantisi(soru, yaziyor);
   } catch (e) {
+    // Sorun açılışa yazılır: ziyaretçi neden cevap alamadı (sınır sunucuda zaten sayılıyor, yine de sırası görünsün).
+    // Sunucunun reddettiği doğrulamayı sunucu kendisi yazar; burada yalnız tarayıcıda kalan doğrulama sorunu.
+    if (e.message === "dogrulama") { if (e.ayrinti) olay("dogrulama", { ayrinti: e.ayrinti }); }
+    else if (e.message === "hata") olay("sunucu", { ayrinti: String(e.durum || "") });
+    else if (METIN.tr[e.message]) olay("sinir", { ayrinti: e.message });
+    else if (e.name === "AbortError") olay("ag", { ayrinti: "zaman" });
+    else if (e instanceof TypeError && /fetch|network|load/i.test(e.message)) olay("ag", { ayrinti: "baglanti" });
+    else olay("sunucu", { ayrinti: "istemci" }); // sayfanın kendi hatası, ağ değil
     yaziyor.textContent = METIN[dil][e.message] || METIN[dil].hata;
     yaziyor.classList.add("hata");
     gecmis.pop(); // cevapsız soru geçmişte kalmasın
@@ -291,8 +319,12 @@ $("bilgiDugme").onclick = () => {
 };
 function adresiAl(tekrar = false) {
   // Davet kodu başlıkta gider (adreste değil): özgeçmişten gelen açılış ayrı sayılır.
-  const basliklar = { ...(DAVET ? { "X-Davet": DAVET } : {}), ...(tekrar ? { "X-Tekrar": "1" } : {}) };
-  return fetch(ILETISIM, { signal: AbortSignal.timeout(5000), headers: basliklar }).then((y) => (y.ok ? y.json() : null)).then((v) => {
+  const basliklar = { ...(DAVET ? { "X-Davet": DAVET } : {}), ...(tekrar ? { "X-Tekrar": "1" } : {}),
+    ...(ACILIS ? { "X-Acilis": ACILIS } : {}) };
+  return fetch(ILETISIM, { signal: AbortSignal.timeout(5000), headers: basliklar }).then((y) => {
+    if (!y.ok && !tekrar) olay("iletisim", { ayrinti: String(y.status) });
+    return y.ok ? y.json() : null;
+  }).then((v) => {
     if (!v || typeof v.eposta !== "string" || !v.eposta.includes("@")) return;
     EPOSTA = v.eposta;
     $("eposta").href = "#";
@@ -300,8 +332,14 @@ function adresiAl(tekrar = false) {
     $("eposta").setAttribute("role", "button");
     $("eposta").setAttribute("aria-expanded", "false");
     $("eposta").onclick = (e) => { e.preventDefault(); kutuyuAcKapa($("eposta"), "", $("eposta").closest(".not")); };
-  }).catch(() => {});
+  }).catch((e) => { if (!tekrar) olay("iletisim", { ayrinti: e.name === "TimeoutError" ? "zaman" : "baglanti" }); });
 }
 adresiAl();
+// Kalma süresi: sekme her gizlendiğinde (kapanınca, başka sekmeye geçince) o ana kadarki görünür süre, saniye.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") { gorunurBas = Date.now(); return; }
+  if (gorunurBas !== null) { gorunurSure += Date.now() - gorunurBas; gorunurBas = null; }
+  olay("ayrildi", { sure: Math.round(gorunurSure / 1000) });
+});
 if (LINKEDIN) $("linkedin").href = LINKEDIN; else $("linkedin").remove();
 diliUygula();

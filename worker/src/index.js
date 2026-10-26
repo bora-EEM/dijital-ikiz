@@ -46,7 +46,7 @@ function corsBasliklari(istek, env) {
   const koken = istek.headers.get("Origin") || "";
   const basliklar = {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-Davet, X-Tekrar",
+    "Access-Control-Allow-Headers": "Content-Type, X-Davet, X-Tekrar, X-Acilis",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
@@ -59,6 +59,28 @@ function json(veri, durum, basliklar) {
     status: durum,
     headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...basliklar },
   });
+}
+
+// Açılış kaydının ziyaretçi özeti (Bora'nın kararı 2026-10-26): yalnız kaba sınıflar; IP ve tarayıcı kimliği yazılmaz.
+// Ziyaretçi izlenmek istemediğini tarayıcısıyla söylediyse (GPC ya da DNT) hiç özet çıkmaz, açılış yalnız sayılır.
+const ROBOT = /bot|crawl|spider|slurp|headless|lighthouse|preview|scanner|python|curl|wget|httpclient|phantom|selenium|puppeteer|playwright/i;
+const acilisKimligi = (k) => (/^[0-9a-f]{16}$/.test(String(k || "")) ? String(k) : "");
+export function ziyaretciOzeti(istek) {
+  if (istek.headers.get("Sec-GPC") === "1" || istek.headers.get("DNT") === "1") return null;
+  const ua = istek.headers.get("User-Agent") || "";
+  const ulke = String(istek.cf?.country || istek.headers.get("CF-IPCountry") || "").toUpperCase();
+  const dil = (istek.headers.get("Accept-Language") || "").split(",")[0].split("-")[0].trim().toLowerCase();
+  // Kurum (Bora 2026-10-26: "hangi şirket girmiş ne sormuş en önemlisi"): ziyaretçinin internetini sağlayan ağın sahibi,
+  // Cloudflare'in bildirdiği ad. Kendi ağı olan şirkette şirketin adı, evde ya da telefonda internet sağlayıcısı
+  // (ör. Türk Telekom); kişiyi göstermez. Gelinen site yazılmaz (Bora: önemsiz; az veri).
+  const kurum = String(istek.cf?.asOrganization || "").replace(/[^\p{L}\p{N} .,&'()-]/gu, "").trim().slice(0, 80);
+  return {
+    ulke: /^[A-Z][A-Z0-9]$/.test(ulke) ? ulke : "",
+    kurum,
+    cihaz: /iPad|Tablet/i.test(ua) ? "tablet" : /Mobi|Android|iPhone/i.test(ua) ? "telefon" : ua ? "bilgisayar" : "",
+    dil: /^[a-z]{2,3}$/.test(dil) ? dil : "",
+    robot: !ua || ROBOT.test(ua),
+  };
 }
 
 const GENEL_HATA = "Şu an cevap veremiyorum, birazdan tekrar deneyin.";
@@ -102,17 +124,46 @@ export async function istegiIsle(istek, env, ctx) {
     }
     // Sayfa açılışı istatistiğe yazılır (isimsiz toplam); sayaç düşerse adres yine verilir.
     const davet = Boolean(env.DAVET_ANAHTARI) && esit(istek.headers.get("X-Davet") || "", env.DAVET_ANAHTARI);
-    // Sayfanın ikinci isteği (ilki düştüyse) sayılmaz.
+    // Sayfanın ikinci isteği (ilki düştüyse) sayılmaz. Açılış kimliği varsa (izin varsa) açılış kaydı da açılır.
+    const kimlik = acilisKimligi(istek.headers.get("X-Acilis"));
+    const ozet = kimlik ? ziyaretciOzeti(istek) : null;
     const ziyaret = istek.headers.get("X-Tekrar") ? Promise.resolve()
-      : sayacaSor(env, { islem: "ziyaret", davet }).catch((e) => console.error(`ziyaret sayılamadı: ${e.message}`));
+      : sayacaSor(env, { islem: "ziyaret", davet, ...(ozet ? { acilis: { kimlik, ...ozet } } : {}) })
+        .then((r) => { if (r?.tavan) console.error("günlük açılış tavanı doldu: açılış sayılmadı"); })
+        .catch((e) => console.error(`ziyaret sayılamadı: ${e.message}`));
     if (ctx?.waitUntil) ctx.waitUntil(ziyaret);
     else await ziyaret;
     return json({ eposta: env.ILETISIM_EPOSTA }, 200, cors);
   }
+  // Sayfada yaşanan sorun ya da kalma süresi (açılış kaydına). Tarayıcı bunu sayfadan çıkarken de yollar (sendBeacon):
+  // gövde düz metin, ön kontrol yok; cevap okunmaz, hep 204. Yabancı köken ve büyük gövde yazılmaz.
+  if (url.pathname === "/api/olay" && istek.method === "POST") {
+    const koken = istek.headers.get("Origin");
+    if (koken && !izinliKokenler(env).includes(koken)) return new Response(null, { status: 403, headers: cors });
+    if (await hizSiniriAsildi(`olay-${ipAnahtari(istek.headers.get("CF-Connecting-IP") || "yerel")}`, env)) {
+      return new Response(null, { status: 429, headers: cors });
+    }
+    if (Number(istek.headers.get("Content-Length") || 0) > 1024) return new Response(null, { status: 204, headers: cors });
+    const ham = await istek.text();
+    let govde = null;
+    try { govde = ham.length <= 1024 ? JSON.parse(ham) : null; } catch { govde = null; }
+    const kimlik = acilisKimligi(govde?.acilis);
+    const ozet = kimlik ? ziyaretciOzeti(istek) : null;
+    if (ozet) {
+      const yaz = sayacaSor(env, { islem: "acilisOlay", kimlik, olay: String(govde.olay || ""), ayrinti: govde.ayrinti,
+        sure: govde.sure, bilgi: { ...ozet, davet: Boolean(env.DAVET_ANAHTARI) && esit(String(govde.davet ?? ""), env.DAVET_ANAHTARI) } })
+        .then((r) => { if (r?.neden === "tavan") console.error("açılış kaydı tavanı doldu: sorun kaydı yazılmadı"); })
+        .catch((e) => console.error(`açılış olayı yazılamadı: ${e.message}`));
+      if (ctx?.waitUntil) ctx.waitUntil(yaz);
+      else await yaz;
+    }
+    return new Response(null, { status: 204, headers: cors });
+  }
   // Bora'nın uçları: istatistik sınav anahtarıyla; oturum kayıtlarını okuma ve arşivledikten sonra silme yalnız Bora'nın
   // bilgisayarındaki ayrı anahtarla (BORA_ANAHTARI; sınav anahtarı Actions'ta da durur, konuşmalara açılmamalı).
   // Anahtarsız istek ucun varlığını da görmez.
-  const boraUcu = { "GET /api/istatistik": "istatistik", "GET /api/oturumlar": "oturumlar", "POST /api/oturumlar/sil": "oturumSil" }[
+  const boraUcu = { "GET /api/istatistik": "istatistik", "GET /api/oturumlar": "oturumlar", "POST /api/oturumlar/sil": "oturumSil",
+    "GET /api/acilislar": "acilislar" }[
     `${istek.method} ${url.pathname}`];
   if (boraUcu) {
     if (await hizSiniriAsildi(`istatistik-${ipAnahtari(istek.headers.get("CF-Connecting-IP") || "yerel")}`, env)) {
@@ -168,6 +219,14 @@ export async function istegiIsle(istek, env, ctx) {
       oturum = await oturumDogrula(env.IMZA_SIRRI, govde?.oturum);
       if (!oturum) {
         if (!(await turnstileDogrula(env.TURNSTILE_SECRET, govde?.dogrulama, ip, env.TURNSTILE_ALAN || "bora-eem.github.io"))) {
+          // Tarayıcının getirdiği doğrulama jetonu reddedildiyse açılışa sorun olarak yazılır (ziyaretçi soru soramadı).
+          const kimlik = acilisKimligi(govde?.acilis);
+          if (kimlik && govde?.dogrulama && ziyaretciOzeti(istek)) {
+            const yaz = sayacaSor(env, { islem: "acilisOlay", kimlik, olay: "dogrulamaSunucu", ayrinti: "reddedildi" })
+              .catch((e) => console.error(`açılış olayı yazılamadı: ${e.message}`));
+            if (ctx?.waitUntil) ctx.waitUntil(yaz);
+            else await yaz;
+          }
           return json({ hata: "Doğrulama gerekiyor.", kod: "dogrulama" }, 401, cors);
         }
         ({ kimlik: oturum, jeton: yeniJeton } = await oturumOlustur(env.IMZA_SIRRI));
@@ -252,6 +311,7 @@ export async function istegiIsle(istek, env, ctx) {
     if (v.cevap) v = { ...v, cevap: kisiselBilgiyiGizle(v.cevap, izinli) };
     const kayit = oturumKayitKimligi(oturum, env.IMZA_SIRRI)
       .then((kimlik) => sayacaSor(env, { islem: "oturumYaz", kimlik, zaman: new Date().toISOString(), davet,
+        acilis: ziyaretciOzeti(istek) ? acilisKimligi(govde?.acilis) : "",
         dil: govde?.dil === "en" ? "en" : "tr", soru: kisiselBilgiyiGizle(sonMesaj, izinli), ...v }))
       .then((r) => { if (!r?.tamam) console.error(`oturum kaydı yazılmadı: ${r?.neden}`); })
       .catch((e) => console.error(`oturum kaydı yazılamadı: ${e.message}`));
