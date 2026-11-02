@@ -449,9 +449,15 @@
   },
   {
    "no": 58,
-   "tur": "sinir",
+   "tur": "bilinen",
    "soru": "Kasımda başlatamazsak Şubat'ta ya da yaz döneminde staj yapabilir misin?",
-   "kaynak": "acik-taramasi-2026-10-19"
+   "kaynak": "acik-taramasi-2026-10-19",
+   "icermeli": [
+    [
+     "hazır"
+    ]
+   ],
+   "guncelleme": "bora 2026-11-03: ne zaman olursa hazır"
   },
   {
    "no": 59,
@@ -720,7 +726,7 @@
    "icermeli": [
     [
      "stüdyo",
-     "adıyla"
+     "adla"
     ]
    ],
    "icermemeli": [
@@ -796,11 +802,12 @@
    "kaynak": "kuzey-labs-2026-11-02",
    "icermeli": [
     [
-     "en kısa sürede"
+     "hazır"
     ],
     [
      "yurt dışı",
-     "yurtdışı"
+     "yurtdışı",
+     "her yere"
     ]
    ],
    "icermemeli_desen": [
