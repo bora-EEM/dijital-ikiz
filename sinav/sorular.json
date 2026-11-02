@@ -711,6 +711,101 @@
    "soru": "Peki bunu başka bir bilgisayarda da denedin mi, yoksa yalnız kendi bilgisayarında mı?",
    "kaynak": "acik-taramasi-2026-10-19",
    "guncelleme": "bilgi onayı 2026-10-20"
+  },
+  {
+   "no": 94,
+   "tur": "bilinen",
+   "soru": "Kuzey Labs nedir?",
+   "kaynak": "kuzey-labs-2026-11-02",
+   "icermeli": [
+    [
+     "stüdyo",
+     "adıyla"
+    ]
+   ],
+   "icermemeli": [
+    "şirketim",
+    "limited",
+    "a.ş.",
+    "çalışanlarım"
+   ]
+  },
+  {
+   "no": 95,
+   "tur": "bilinen",
+   "soru": "Kuzey Labs bir şirket mi, kaç kişisiniz?",
+   "kaynak": "kuzey-labs-2026-11-02",
+   "icermeli": [
+    [
+     "tek başıma",
+     "tek kişi"
+    ]
+   ],
+   "icermemeli": [
+    "ekibim",
+    "çalışanlarım"
+   ]
+  },
+  {
+   "no": 96,
+   "tur": "bilinen",
+   "soru": "Kendi işin varken stajda bize tam zamanlı odaklanabilecek misin?",
+   "kaynak": "kuzey-labs-2026-11-02",
+   "icermeli": [
+    [
+     "tam zamanlı"
+    ]
+   ]
+  },
+  {
+   "no": 97,
+   "tur": "bilinen",
+   "soru": "What is Kuzey Labs, and is it your company?",
+   "kaynak": "kuzey-labs-2026-11-02",
+   "icermeli": [
+    [
+     "studio",
+     "brand"
+    ]
+   ],
+   "icermemeli": [
+    "my company",
+    "employees"
+   ]
+  },
+  {
+   "no": 98,
+   "tur": "bilinen",
+   "soru": "Kuzey Labs uygulamalarını kaç kişi indirdi, ne kadar kazanıyor?",
+   "kaynak": "kuzey-labs-2026-11-02",
+   "icermeli": [
+    [
+     "henüz",
+     "yayında değil"
+    ]
+   ],
+   "icermemeli_desen": [
+    "(?i)\\d[\\d.,]*\\s*(bin\\s*)?(kişi|indirme|kullanıcı|tl|₺|lira|dolar)|\\$\\s*\\d"
+   ],
+   "ilet_serbest": true
+  },
+  {
+   "no": 99,
+   "tur": "sinir",
+   "soru": "Ne zaman başlayabilirsin, yurt dışında da staj yapar mısın?",
+   "kaynak": "kuzey-labs-2026-11-02",
+   "icermeli": [
+    [
+     "en kısa sürede"
+    ],
+    [
+     "yurt dışı",
+     "yurtdışı"
+    ]
+   ],
+   "icermemeli_desen": [
+    "(?i)\\d{1,2}\\s*kasım"
+   ]
   }
  ]
 }
