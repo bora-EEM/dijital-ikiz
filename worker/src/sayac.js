@@ -9,6 +9,8 @@
 // Oturum kaydı (Bora'nın kararı 2026-10-21): bot doğrulamasından geçmiş her oturumun soruları ve cevapları "ot:<kimlik>"
 // anahtarında. Kimlik oturumun özetidir (IP değil); sorudaki e-posta ve telefon yazılmadan önce gizlenir (index.js).
 // Bora'nın bilgisayarı haftada bir alıp siler; alınmasa da 14 günü geçen kayıt gün değişiminde silinir.
+// Şirkete özel davet kodu (Bora'nın kararı 2026-11-02 K2 B): açılış ve oturum kaydında "kod" alanı; şirket adı sunucuda
+// yok, kodu şirkete Bora'nın bilgisayarı çevirir. Eski tek kodla gelende "davet" var, "kod" yok.
 // Açılış kaydı (Bora'nın kararı 2026-10-26, "en etik yoldan"): her sayfa açılışı "ac:<kimlik>" anahtarında; kimlik
 // sayfanın o açılış için ürettiği rastgele sayıdır (çerez yok, iki ziyaret birbirine bağlanamaz). Yalnız dakika, ülke,
 // internetin geldiği kurum (şirket ağı ya da internet sağlayıcısı), cihaz türü, dil, robot olabilir mi, kalma süresi, soru sayısı ve sayfada yaşanan sorunlar
@@ -55,6 +57,8 @@ const SORU_UZUNLUK = 600, CEVAP_UZUNLUK = 2000;
 const ACILIS_OLAY = 12;
 const OLAYLAR = new Set(["dogrulama", "dogrulamaSunucu", "ag", "sunucu", "sinir", "iletisim"]);
 const kimlikMi = (k) => /^[0-9a-f]{16}$/.test(String(k || ""));
+// Şirkete özel davet kodu (index.js'te gizli listeyle doğrulanmış gelir); kayda yalnız bu biçimde yazılır.
+const kodMu = (k) => /^[a-z0-9]{4,6}$/.test(String(k || ""));
 const dakika = () => new Date().toISOString().slice(0, 16) + ":00.000Z";
 
 // Sorun ucundan (sayfanın ilk isteği düştüyse) açılan kayıt için ayrı, küçük tavan: o uç doğrulamasız, rastgele
@@ -73,7 +77,7 @@ async function acilisKaydi(depo, gun, kimlik, bilgi, tavan = null) {
   await istArtir(depo, gun, [[tavan.sayac]]);
   const b = bilgi || {};
   const kayit = {
-    kimlik, zaman: dakika(), davet: Boolean(b.davet),
+    kimlik, zaman: dakika(), davet: Boolean(b.davet), ...(kodMu(b.kod) ? { kod: b.kod } : {}),
     kurum: String(b.kurum || "").slice(0, 80), ulke: String(b.ulke || "").slice(0, 2), cihaz: String(b.cihaz || "").slice(0, 12),
     dil: String(b.dil || "").slice(0, 3), robot: Boolean(b.robot), soru: 0, olaylar: [],
   };
@@ -178,7 +182,8 @@ export async function sayacIslem(depo, env, istek) {
       if (istek.olay === "ayrildi") {
         // Kalma süresi saniye, en çok bir gün; sekme her gizlendiğinde gelir, en büyüğü kalır.
         const sure = Math.min(86_400, Math.max(0, Math.round(Number(istek.sure) || 0)));
-        if (sure > (ac.sure || 0)) { ac.sure = sure; await depo.put(`ac:${istek.kimlik}`, ac); }
+        // 0 sn de yazılır (yarım saniyeden kısa): "ölçülmedi" ile "hemen kapandı" ayrı kalsın (tarayıcı ayrımı buna bakar).
+        if (ac.sure === undefined || sure > ac.sure) { ac.sure = sure; await depo.put(`ac:${istek.kimlik}`, ac); }
         return { tamam: true };
       }
       if (!OLAYLAR.has(istek.olay)) return { tamam: false, neden: "olay" };
@@ -209,6 +214,8 @@ export async function sayacIslem(depo, env, istek) {
       const a = `ot:${istek.kimlik}`;
       const zaman = String(istek.zaman || new Date().toISOString()).slice(0, 30);
       const ot = (await depo.get(a)) || { kimlik: istek.kimlik, baslangic: zaman, davet: Boolean(istek.davet), mesajlar: [] };
+      // Hangi şirketin koduyla gelindi (Bora'nın kararı 2026-11-02 K2 B); ilk gelen kod kalır.
+      if (kodMu(istek.kod) && !ot.kod) ot.kod = istek.kod;
       if (ot.mesajlar.length >= OTURUM_MESAJ) {
         ot.kesik = (ot.kesik || 0) + 1;
         await depo.put(a, ot);

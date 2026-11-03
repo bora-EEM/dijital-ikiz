@@ -12,7 +12,7 @@
 import { bilgiyiAl, cevapla, hazirCevap, mesajlariDogrula, soruyuKaydet, isverenCevabiniKaydet, saglayicilar } from "./ikiz.js";
 import { sayacaSor, Sayac } from "./sayac.js";
 import { ipAnahtari, cevapImzasi, cevapImzasiDogru, oturumOlustur, oturumDogrula, turnstileDogrula, esit,
-  kisiselBilgiyiGizle, oturumKayitKimligi } from "./guvenlik.js";
+  kisiselBilgiyiGizle, oturumKayitKimligi, davetCoz } from "./guvenlik.js";
 
 export { Sayac };
 
@@ -123,12 +123,13 @@ export async function istegiIsle(istek, env, ctx) {
       return json({ eposta: null }, 503, cors);
     }
     // Sayfa açılışı istatistiğe yazılır (isimsiz toplam); sayaç düşerse adres yine verilir.
-    const davet = Boolean(env.DAVET_ANAHTARI) && esit(istek.headers.get("X-Davet") || "", env.DAVET_ANAHTARI);
+    // Şirkete özel kodla gelindiyse kod da açılış kaydına yazılır (şirket adı sunucuda yok).
+    const { davet, kod } = davetCoz(env, istek.headers.get("X-Davet"));
     // Sayfanın ikinci isteği (ilki düştüyse) sayılmaz. Açılış kimliği varsa (izin varsa) açılış kaydı da açılır.
     const kimlik = acilisKimligi(istek.headers.get("X-Acilis"));
     const ozet = kimlik ? ziyaretciOzeti(istek) : null;
     const ziyaret = istek.headers.get("X-Tekrar") ? Promise.resolve()
-      : sayacaSor(env, { islem: "ziyaret", davet, ...(ozet ? { acilis: { kimlik, ...ozet } } : {}) })
+      : sayacaSor(env, { islem: "ziyaret", davet, ...(ozet ? { acilis: { kimlik, ...ozet, kod } } : {}) })
         .then((r) => { if (r?.tavan) console.error("günlük açılış tavanı doldu: açılış sayılmadı"); })
         .catch((e) => console.error(`ziyaret sayılamadı: ${e.message}`));
     if (ctx?.waitUntil) ctx.waitUntil(ziyaret);
@@ -151,7 +152,7 @@ export async function istegiIsle(istek, env, ctx) {
     const ozet = kimlik ? ziyaretciOzeti(istek) : null;
     if (ozet) {
       const yaz = sayacaSor(env, { islem: "acilisOlay", kimlik, olay: String(govde.olay || ""), ayrinti: govde.ayrinti,
-        sure: govde.sure, bilgi: { ...ozet, davet: Boolean(env.DAVET_ANAHTARI) && esit(String(govde.davet ?? ""), env.DAVET_ANAHTARI) } })
+        sure: govde.sure, bilgi: { ...ozet, ...davetCoz(env, govde.davet) } })
         .then((r) => { if (r?.neden === "tavan") console.error("açılış kaydı tavanı doldu: sorun kaydı yazılmadı"); })
         .catch((e) => console.error(`açılış olayı yazılamadı: ${e.message}`));
       if (ctx?.waitUntil) ctx.waitUntil(yaz);
@@ -257,7 +258,7 @@ export async function istegiIsle(istek, env, ctx) {
 
   // 5. Günlük sayaç. Sayaca ulaşılamazsa kapalı kalınır (sınırsız açık kalmaktansa).
   let izin;
-  let davet = false;
+  let davet = false, kod = "";
   try {
     // Paralı yuva sıradaysa bir sorunun en kötü maliyeti baştan ayrılır: 14.000 girdi token (istem ~9.500, Gemini
     // sayımı 2026-10-19; en uzun geçmiş 8 mesaj ~2.800; bilgi dosyasının büyümesine pay) ve 2.000 çıktı token
@@ -265,8 +266,8 @@ export async function istegiIsle(istek, env, ctx) {
     // Bir soruda paralı yuvaların hepsi sırayla çağrılabilir (ilki boş dönerse ikincisi): ayırma toplamdır.
     const rezerve = saglayicilar(env).filter((s) => s.ucretli)
       .reduce((t, s) => t + (14_000 * s.ucretli.girdi + 2_000 * s.ucretli.cikti) / 1e6, 0);
-    // Davet kodu sunucunun gizli ayarında (DAVET_ANAHTARI); açık depoda değil, yalnız özgeçmişteki bağlantıda.
-    davet = Boolean(env.DAVET_ANAHTARI) && esit(String(govde?.davet ?? ""), env.DAVET_ANAHTARI);
+    // Davet kodları sunucunun gizli ayarında (DAVET_ANAHTARI, DAVET_KODLARI); açık depoda değil, yalnız bağlantıda.
+    ({ davet, kod } = davetCoz(env, govde?.davet));
     izin = await sayacaSor(env, { islem: "izin", ip: ipKey, oturum, sinav, rezerve, davet });
   } catch (e) {
     console.error(`sayaç ulaşılamadı: ${e.message}`);
@@ -310,7 +311,7 @@ export async function istegiIsle(istek, env, ctx) {
     const izinli = [env.ILETISIM_EPOSTA];
     if (v.cevap) v = { ...v, cevap: kisiselBilgiyiGizle(v.cevap, izinli) };
     const kayit = oturumKayitKimligi(oturum, env.IMZA_SIRRI)
-      .then((kimlik) => sayacaSor(env, { islem: "oturumYaz", kimlik, zaman: new Date().toISOString(), davet,
+      .then((kimlik) => sayacaSor(env, { islem: "oturumYaz", kimlik, zaman: new Date().toISOString(), davet, kod,
         acilis: ziyaretciOzeti(istek) ? acilisKimligi(govde?.acilis) : "",
         dil: govde?.dil === "en" ? "en" : "tr", soru: kisiselBilgiyiGizle(sonMesaj, izinli), ...v }))
       .then((r) => { if (!r?.tamam) console.error(`oturum kaydı yazılmadı: ${r?.neden}`); })

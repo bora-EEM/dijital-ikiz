@@ -122,3 +122,64 @@ test("sohbet oturuma yazılır (soru ve cevapta kişisel bilgi gizli, IP yok), c
   assert.equal((await sil.json()).silinen, 1);
   assert.equal((await (await oku("bora")).json()).oturumlar.length, 0);
 });
+
+// Şirkete özel davet kodu (Bora'nın kararı 2026-11-02 K2 B): ikiz her kodla aynı cevap verir, kayda yalnız kod girer
+// (şirket adı sunucuda yok); eski tek kod çalışmaya devam eder; tanınmayan kod anonim sayılır, kayda kod yazılmaz.
+test("şirket kodu: ikiz aynı cevap verir, oturum ve açılış kaydında kod görünür; eski kod çalışır, yanlış kod tanınmaz", async () => {
+  const depo = bellekDeposu();
+  const env = { BILGI_METNI: "Elektrik-elektronik mühendisliği öğrencisiyim.", GEMINI_API_KEY: "m", BORA_ANAHTARI: "bora",
+                IMZA_SIRRI: "", ILETISIM_EPOSTA: "a@b.c", GELISTIRME: "1", __depo: depo,
+                DAVET_ANAHTARI: "eski-davet-ornek", DAVET_KODLARI: "k7m2a, q9x4r ,bozuk-kod,zz", GUNLUK_SORU: "0", DAVET_GUNLUK: "10" };
+  const gercek = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ choices: [{ message: { content: '{"tur":"A","cevap":"Elektrik-elektronik mühendisliği öğrencisiyim."}' } }] }));
+  const sor = (ip, davet, acilis) => istegiIsle(new Request("http://x/api/sohbet", {
+    method: "POST", headers: { "Content-Type": "application/json", "CF-Connecting-IP": ip, "User-Agent": "Mozilla/5.0" },
+    body: JSON.stringify({ mesajlar: [{ rol: "user", icerik: "Ne okuyorsun?" }], ...(davet !== undefined ? { davet } : {}), ...(acilis ? { acilis } : {}) }),
+  }), env, null);
+  const ac = (kimlik, davet) => istegiIsle(new Request("http://x/api/iletisim", {
+    headers: { "CF-Connecting-IP": "203.0.113.1", "User-Agent": "Mozilla/5.0", "X-Acilis": kimlik, ...(davet ? { "X-Davet": davet } : {}) } }), env, null);
+  try {
+    await ac("aaaaaaaaaaaaaaa1", "k7m2a");
+    await ac("aaaaaaaaaaaaaaa2", "eski-davet-ornek");
+    await ac("aaaaaaaaaaaaaaa3", "x7f2b"); // listede yok
+    const cevaplar = [];
+    for (const [ip, davet, acilis] of [["198.51.100.1", "k7m2a", "aaaaaaaaaaaaaaa1"], ["198.51.100.2", "Q9X4R"],
+                                       ["198.51.100.3", "eski-davet-ornek", "aaaaaaaaaaaaaaa2"]]) {
+      const y = await sor(ip, davet, acilis);
+      assert.equal(y.status, 200, davet);
+      cevaplar.push((await y.json()).cevap);
+    }
+    assert.equal(new Set(cevaplar).size, 1, "her kodla aynı cevap");
+    // Anonim havuz kapalı (GUNLUK_SORU 0): tanınmayan, bozuk ya da listede biçimi tutmayan kod davet havuzunu açmaz.
+    for (const yanlis of ["x7f2b", "bozuk-kod", "zz", "k7m2", "k7m2a,q9x4r", ""]) {
+      const y = await sor("198.51.100.4", yanlis);
+      assert.deepEqual([y.status, (await y.json()).kod], [429, "genel"], yanlis);
+    }
+  } finally { globalThis.fetch = gercek; }
+  const { oturumlar } = await (await istegiIsle(new Request("http://x/api/oturumlar", { headers: { Authorization: "Bearer bora" } }), env, null)).json();
+  const kodlar = oturumlar.map((o) => [o.davet, o.kod ?? null]).sort((a, b) => String(a[1]).localeCompare(String(b[1])));
+  assert.deepEqual(kodlar, [[true, "k7m2a"], [true, null], [true, "q9x4r"]].sort((a, b) => String(a[1]).localeCompare(String(b[1]))));
+  const { acilislar } = await (await istegiIsle(new Request("http://x/api/acilislar", { headers: { Authorization: "Bearer bora" } }), env, null)).json();
+  const ac1 = acilislar.find((a) => a.kimlik === "aaaaaaaaaaaaaaa1");
+  assert.deepEqual([ac1.davet, ac1.kod, ac1.soru], [true, "k7m2a", 1]);
+  const ac2 = acilislar.find((a) => a.kimlik === "aaaaaaaaaaaaaaa2");
+  assert.deepEqual([ac2.davet, ac2.kod], [true, undefined]);
+  const ac3 = acilislar.find((a) => a.kimlik === "aaaaaaaaaaaaaaa3");
+  assert.deepEqual([ac3.davet, ac3.kod], [false, undefined]);
+  // Gün toplamında özgeçmiş açılışı iki (şirket kodu ve eski kod), anonim bir.
+  const g = (await sayacIslem(depo, env, { islem: "istatistik" })).gunler[0];
+  assert.deepEqual([g.ziyaretDavet, g.ziyaret], [2, 1]);
+});
+
+test("şirket kodu: sorun ucundan açılan kayıt da kodu taşır; kodsuz ayarda şirket kodu hiçbir şey açmaz", async () => {
+  const depo = bellekDeposu();
+  const env = { ILETISIM_EPOSTA: "a@b.c", BORA_ANAHTARI: "bora", GELISTIRME: "1", __depo: depo, DAVET_KODLARI: "k7m2a" };
+  const y = await istegiIsle(new Request("http://x/api/olay", { method: "POST", headers: { "Content-Type": "text/plain", "User-Agent": "Mozilla/5.0" },
+    body: JSON.stringify({ acilis: "bbbbbbbbbbbbbbb1", olay: "ag", ayrinti: "zaman", davet: "k7m2a" }) }), env, null);
+  assert.equal(y.status, 204);
+  const { acilislar } = await (await istegiIsle(new Request("http://x/api/acilislar", { headers: { Authorization: "Bearer bora" } }), env, null)).json();
+  assert.deepEqual([acilislar[0].davet, acilislar[0].kod], [true, "k7m2a"]);
+  const { davetCoz } = await import("../worker/src/guvenlik.js");
+  assert.deepEqual(davetCoz({}, "k7m2a"), { davet: false, kod: "" });
+  assert.deepEqual(davetCoz({ DAVET_KODLARI: "" }, ""), { davet: false, kod: "" });
+});

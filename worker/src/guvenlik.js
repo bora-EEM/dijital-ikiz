@@ -52,6 +52,25 @@ export function esit(a, b) {
   return fark === 0;
 }
 
+// Davet kodu. İki tür: özgeçmişteki eski tek kod (DAVET_ANAHTARI) ve şirkete özel kısa kodlar (DAVET_KODLARI, virgüllü;
+// Bora'nın kararı 2026-11-02 K2 B: ikiz herkese aynı, yalnız panel hangi şirketin geldiğini bilir). Sunucu şirket adını
+// bilmez: kayda yalnız kod yazılır, kodu şirkete Bora'nın bilgisayarındaki istatistik sayfası çevirir. Tanınmayan kod
+// anonim sayılır (davet havuzu açılmaz, kayda kod yazılmaz). Dönüş: { davet, kod } (eski kodda kod boş).
+const SIRKET_KODU = /^[a-z0-9]{4,6}$/;
+export function davetCoz(env, gelen) {
+  const metin = String(gelen ?? "").trim().slice(0, 64);
+  if (!metin) return { davet: false, kod: "" };
+  if (env.DAVET_ANAHTARI && esit(metin, env.DAVET_ANAHTARI)) return { davet: true, kod: "" };
+  const aday = metin.toLowerCase();
+  if (!SIRKET_KODU.test(aday)) return { davet: false, kod: "" };
+  let bulunan = "";
+  for (const k of String(env.DAVET_KODLARI || "").split(",")) {
+    const kod = k.trim();
+    if (SIRKET_KODU.test(kod) && esit(aday, kod)) bulunan = kod; // hepsine bakılır: süre kodun yerini ele vermesin
+  }
+  return bulunan ? { davet: true, kod: bulunan } : { davet: false, kod: "" };
+}
+
 // İkizin her cevabı oturuma bağlı imzayla döner; sayfa geçmişi geri yollarken imzayı da yollar. İmzası tutmayan
 // "asistan" mesajı reddedilir: ziyaretçi ikizin ağzına sahte önceki cevap koyamaz.
 export const cevapImzasi = (sir, oturum, cevap) => hmac(sir, `cevap\n${oturum}\n${cevap}`);

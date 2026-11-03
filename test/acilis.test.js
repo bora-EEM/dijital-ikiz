@@ -74,6 +74,17 @@ test("sorun kaydı: bilinen olaylar sırayla yazılır, kalma süresinin en büy
   assert.equal((await oku(e))[0].olaylar.length, 12, "açılış başına sorun kaydı tavanlı");
 });
 
+test("kalma süresi: 0 sn de yazılır (hemen kapandı ile ölçülmedi ayrı), sonra gelen büyük süre üstüne yazar", async () => {
+  const e = env();
+  await ac(e, { "X-Acilis": K, "User-Agent": "Mozilla/5.0" });
+  assert.equal((await oku(e))[0].sure, undefined);
+  await olay(e, { acilis: K, olay: "ayrildi", sure: 0 });
+  assert.equal((await oku(e))[0].sure, 0);
+  await olay(e, { acilis: K, olay: "ayrildi", sure: 6 });
+  await olay(e, { acilis: K, olay: "ayrildi", sure: 0 });
+  assert.equal((await oku(e))[0].sure, 6);
+});
+
 test("sorun ucu: yabancı köken, büyük ya da bozuk gövde, izinsiz ziyaretçi yazılmaz; uç anahtarsız okunamaz", async () => {
   const e = env();
   assert.equal((await olay(e, { acilis: K, olay: "ag" }, { Origin: "https://kotu.example" })).status, 403);
