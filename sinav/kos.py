@@ -37,6 +37,9 @@ def post(url: str, govde: dict, basliklar: dict, zaman_asimi: int = 90) -> tuple
             return e.code, json.loads(e.read())
         except json.JSONDecodeError:
             return e.code, {}
+    except (TimeoutError, urllib.error.URLError, OSError) as e:
+        # Zaman aşımı ya da ağ kopması sınavı düşürmez: bu deneme başarısız sayılır (2026-10-20, hakem 90 sn'de cevapsız).
+        return 0, {"hata": f"{type(e).__name__}: {e}"}
 
 
 def ikize_sor(soru: dict, saglayici: str, sunucu: str) -> dict:
@@ -71,13 +74,15 @@ SORU: {soru}
 
 CEVAP: {cevap}"""
     url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-    for _ in range(3):
-        durum, veri = post(url, {"model": model, "messages": [{"role": "user", "content": istem}],
+    # Asıl hakem yoğunsa (503/429) bir sonraki denemede yedek güçlü model; zayıf modele düşülmez.
+    for deneme in range(4):
+        secilen = model if deneme % 2 == 0 else ("gemini-3.8-flash" if model != "gemini-3.8-flash" else "gemini-3.5-flash")
+        durum, veri = post(url, {"model": secilen, "messages": [{"role": "user", "content": istem}],
                                  "response_format": {"type": "json_object"}, "temperature": 0},
                            {"Authorization": f"Bearer {ENV['GEMINI_API_KEY']}"})
         if durum == 200:
             try:
-                return json.loads(veri["choices"][0]["message"]["content"])
+                return {**json.loads(veri["choices"][0]["message"]["content"]), "hakem": secilen}
             except (KeyError, json.JSONDecodeError):
                 return {"uydurma": None, "neden": "hakem cevabı okunamadı"}
         time.sleep(15)
@@ -131,7 +136,10 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--saglayici", required=True, help="ör. groq:openai/gpt-oss-120b")
     ap.add_argument("--bekle", type=float, default=25, help="sorular arası saniye (Groq ücretsiz kotası için ~25)")
-    ap.add_argument("--hakem", default="gemini-3.5-flash-lite",
+    # Hakem sınanan modelden güçlü olmalı (Bora 2026-10-20: "hakem niye model zekası düşük?"): Flash-Lite'ın
+    # yanlış alarmları (18, 34, 43) ve kaçırdığı uydurma (82 "iş arayacağım") zayıf hakemdendi. Ücretsiz katmanda
+    # çalışan en güçlü model 3.5 Flash; yoğunsa 3.8 Flash denenir.
+    ap.add_argument("--hakem", default="gemini-3.5-flash",
                     help="'yok': hakem çağrılmaz, uydurma denetimi rapordan ayrıca yapılır (Gemini kotası dolunca)")
     ap.add_argument("--sunucu", default="http://localhost:8787")
     ap.add_argument("--yalniz", default="", help="ör. 14,15 — yalnız bu numaralar")
@@ -145,7 +153,7 @@ def main() -> int:
 
     # Hakem sınanan modelle aynı olmasın; karşılaştırma tam adla ("gemini-3.5-flash", "gemini-3.5-flash-lite"nin
     # parçası diye elenip zayıf hakeme düşüyordu, 2026-10-17).
-    hakem_modeli = a.hakem if a.hakem != a.saglayici.split(":", 1)[-1] else "gemini-3.1-flash-lite"
+    hakem_modeli = a.hakem if a.hakem != a.saglayici.split(":", 1)[-1] else "gemini-3.8-flash"
     satirlar, uydurma, kural_hatasi, hakemsiz = [], 0, 0, 0
     for i, s in enumerate(sorular):
         if i:

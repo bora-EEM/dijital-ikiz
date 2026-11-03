@@ -528,3 +528,28 @@ test("dört yuvalı sıra: aynı modelin paralı yuvası yalnız kota (429) dü�
     assert.equal(giden.length, 3);
   } finally { globalThis.fetch = gercek; Date.now = gercekSaat; }
 });
+
+test("iki ücretsiz anahtar: ilki kotadan düşerse ikincisi, ikisi de kotadaysa paralı; model yoğunsa aynı modelin bütün yuvaları atlanır", async () => {
+  const { cevapla } = await import("../worker/src/ikiz.js");
+  const gercek = globalThis.fetch;
+  const dolu = () => new Response(JSON.stringify({ choices: [{ message: { content: '{"tur":"A","cevap":"B2."}' } }] }), { status: 200 });
+  const kota = () => new Response("kota", { status: 429 });
+  let sira = [];
+  const giden = [];
+  globalThis.fetch = async (url, istek) => { giden.push(`${JSON.parse(istek.body).model}:${istek.headers.Authorization.slice(7)}`); return sira.shift(); };
+  const env = { ILETISIM_EPOSTA: "o@x.tr", BILGI_METNI: "B2", GEMINI_API_KEY: "m1", GEMINI_YEDEK_API_KEY: "m2", GEMINI_UCRETLI_API_KEY: "p",
+    GEMINI_UCRETLI_MODELLER: "gemini-3.5-flash-lite,gemini-3.8-flash" };
+  assert.deepEqual(saglayicilar(env).map((s) => s.ad), ["gemini:gemini-3.5-flash-lite", "gemini-2:gemini-3.5-flash-lite",
+    "gemini-ucretli:gemini-3.5-flash-lite", "gemini-ucretli:gemini-3.8-flash"]);
+  const soru = [{ role: "user", content: "İngilizce seviyen?" }];
+  const kos = async (c) => { sira = c; giden.length = 0; return cevapla(soru, env, "tr", async () => {}); };
+  try {
+    let s = await kos([kota(), dolu()]);
+    assert.equal(s.saglayici, "gemini-2:gemini-3.5-flash-lite");
+    s = await kos([kota(), kota(), dolu()]);
+    assert.equal(s.saglayici, "gemini-ucretli:gemini-3.5-flash-lite");
+    s = await kos([new Response("yoğun", { status: 503 }), dolu()]);
+    assert.equal(s.saglayici, "gemini-ucretli:gemini-3.8-flash");
+    assert.deepEqual(giden, ["gemini-3.5-flash-lite:m1", "gemini-3.8-flash:p"]);
+  } finally { globalThis.fetch = gercek; }
+});

@@ -719,6 +719,52 @@
    "guncelleme": "bilgi onayı 2026-10-20"
   },
   {
+   "no": 91,
+   "tur": "bilinen",
+   "soru": "Bu dijital ikiz hangi yapay zekâ modelini kullanıyor?",
+   "kaynak": "bora-2026-10-20",
+   "icermeli": [
+    [
+     "Gemini"
+    ]
+   ],
+   "icermemeli": [
+    "ticari"
+   ]
+  },
+  {
+   "no": 92,
+   "tur": "bilinen",
+   "soru": "Bu sistem nasıl çalışıyor, sunucu ve yedek model ne?",
+   "kaynak": "bora-2026-10-20",
+   "icermeli": [
+    [
+     "Cloudflare"
+    ],
+    [
+     "gpt-oss",
+     "yedek"
+    ]
+   ],
+   "icermemeli": [
+    "ticari"
+   ]
+  },
+  {
+   "no": 93,
+   "tur": "bilinen",
+   "soru": "Which LLM powers this digital twin?",
+   "kaynak": "bora-2026-10-20",
+   "icermeli": [
+    [
+     "Gemini"
+    ]
+   ],
+   "icermemeli": [
+    "commercial"
+   ]
+  },
+  {
    "no": 94,
    "tur": "bilinen",
    "soru": "Kuzey Labs nedir?",
